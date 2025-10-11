@@ -52,7 +52,7 @@ function handle_start_command($chat_id, $user_id, $conn, $config) {
         ]
     ];
 
-    send_reply($chat_id, $message, $keyboard, $user_id, $conn);
+    send_reply($config, $chat_id, $message, $keyboard, $user_id, $conn);
     return null;
 }
 
@@ -66,7 +66,7 @@ function handle_games_command($chat_id, $user_id, $conn, $config) {
     $games = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
     if (!$games) {
-        send_reply($chat_id, "Пока нет активных игр 😢", null, $user_id, $conn);
+        send_reply($config, $chat_id, "Пока нет активных игр 😢", null, $user_id, $conn);
         return null;
     }
 
@@ -80,8 +80,8 @@ function handle_games_command($chat_id, $user_id, $conn, $config) {
             ]
         ];
 
-        send_telegram($chat_id, $text, $keyboard);
-        log_bot_message($user_id, $text, $conn);
+        send_telegram($config, $chat_id, $text, $keyboard, 'HTML');
+        log_bot_message($user_id, strip_tags($text), $conn);
     }
 
     return null;
@@ -123,12 +123,7 @@ function handle_register_button($data, $chat_id, $user_id, $conn, $config, $call
     }
 
     // Отправляем пользователю
-    @file_get_contents($config['api_url'] . "sendMessage?" . http_build_query([
-        'chat_id'    => $chat_id,
-        'text'       => $msg,
-        'parse_mode' => 'HTML',
-        'reply_markup' => $keyboard ? json_encode($keyboard, JSON_UNESCAPED_UNICODE) : null
-    ]));
+    send_telegram($config, $chat_id, $msg, $keyboard, 'HTML');
 
     // Логируем ответ бота
     log_bot_message($user_id, strip_tags($msg), $conn);
@@ -161,7 +156,7 @@ function handle_enter_team_button($data, $chat_id, $user_id, $conn, $config, $ca
         $params['reply_to_message_id'] = $callback['message']['message_id'];
     }
 
-    @file_get_contents($config['api_url'] . "sendMessage?" . http_build_query($params));
+    telegram_request($config, 'sendMessage', $params);
 
     // Логируем отправленную подсказку
     log_bot_message($user_id, strip_tags($text), $conn);
@@ -170,7 +165,15 @@ function handle_enter_team_button($data, $chat_id, $user_id, $conn, $config, $ca
 
 
 function handle_free_text($text, $chat_id, $user_id, $conn, $config) {
+    if (!$user_id) {
+        return 'Не удалось определить пользователя. Пожалуйста, отправьте команду /start.';
+    }
+
     $teamName = trim($text);
+
+    if ($teamName === '') {
+        return 'Название команды не может быть пустым. Пожалуйста, отправьте текстовое название.';
+    }
 
     // Ищем самую свежую регистрацию без названия команды
     $stmt = $conn->prepare("
@@ -192,11 +195,7 @@ function handle_free_text($text, $chat_id, $user_id, $conn, $config) {
         ]);
 
         $confirm = "✅ Команда «".htmlspecialchars($teamName, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8')."» сохранена.";
-        @file_get_contents($config['api_url'] . "sendMessage?" . http_build_query([
-            'chat_id'    => $chat_id,
-            'text'       => $confirm,
-            'parse_mode' => 'HTML'
-        ]));
+        send_telegram($config, $chat_id, $confirm, null, 'HTML');
 
         log_bot_message($user_id, strip_tags($confirm), $conn);
         return null;
@@ -209,27 +208,33 @@ function handle_free_text($text, $chat_id, $user_id, $conn, $config) {
 
 # --------------------- УТИЛИТЫ ----------------------
 
-function send_reply($chat_id, $text, $keyboard, $user_id, $conn) {
-    send_telegram($chat_id, $text, $keyboard);
-    log_bot_message($user_id, $text, $conn);
+function send_reply($config, $chat_id, $text, $keyboard, $user_id, $conn) {
+    send_telegram($config, $chat_id, $text, $keyboard, 'HTML');
+    log_bot_message($user_id, strip_tags($text), $conn);
 }
 
-function send_telegram($chat_id, $text, $keyboard = null) {
-    global $config;
-
+function send_telegram($config, $chat_id, $text, $keyboard = null, $parseMode = null) {
     $params = [
         'chat_id' => $chat_id,
         'text'    => $text
     ];
 
     if ($keyboard) {
-        $params['reply_markup'] = json_encode($keyboard);
+        $params['reply_markup'] = json_encode($keyboard, JSON_UNESCAPED_UNICODE);
     }
 
-    file_get_contents($config['api_url'] . "sendMessage?" . http_build_query($params));
+    if ($parseMode) {
+        $params['parse_mode'] = $parseMode;
+    }
+
+    telegram_request($config, 'sendMessage', $params);
 }
 
 function log_bot_message($user_id, $text, $conn) {
+    if (!$user_id) {
+        return;
+    }
+
     $stmt = $conn->prepare("
         INSERT INTO messages (user_id, message, from_bot)
         VALUES (:uid, :msg, 1)
