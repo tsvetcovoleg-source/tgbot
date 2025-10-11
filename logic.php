@@ -101,6 +101,18 @@ function handle_register_button($data, $chat_id, $user_id, $conn, $config, $call
     $game = $stmt->fetch(PDO::FETCH_ASSOC);
 
     if ($game) {
+        // Фиксируем новую регистрацию сразу после нажатия кнопки
+        $stmtInsert = $conn->prepare("
+            INSERT INTO registrations (user_id, game_id, created_at)
+            VALUES (:uid, :gid, NOW())
+        ");
+        $stmtInsert->execute([
+            ':uid' => $user_id,
+            ':gid' => $game_id
+        ]);
+
+        $registrationId = (int) $conn->lastInsertId();
+
         // Формируем сообщение
         $msg = "✅ Вы зарегистрированы на игру:\n\n" .
                "🎮 <b>{$game['game_number']}</b>\n" .
@@ -111,7 +123,7 @@ function handle_register_button($data, $chat_id, $user_id, $conn, $config, $call
         $keyboard = [
             'inline_keyboard' => [
                 [
-                    ['text' => '📝 Ввести название команды', 'callback_data' => 'enter_team_' . $game_id]
+                    ['text' => '📝 Ввести название команды', 'callback_data' => 'enter_team_' . $registrationId]
                 ]
             ]
         ];
@@ -130,32 +142,38 @@ function handle_register_button($data, $chat_id, $user_id, $conn, $config, $call
 }
 
 function handle_enter_team_button($data, $chat_id, $user_id, $conn, $config, $callback) {
-    // Получаем game_id из callback_data: enter_team_{id}
-    $game_id = (int) str_replace('enter_team_', '', $data);
+    // Получаем идентификатор из callback_data: enter_team_{registration_id} (новый формат)
+    $identifier = (int) str_replace('enter_team_', '', $data);
 
-    // Проверяем, существует ли уже регистрация пользователя на эту игру
     $stmt = $conn->prepare("
-        SELECT id, team
+        SELECT id, game_id, team
         FROM registrations
-        WHERE user_id = :uid AND game_id = :gid
-        ORDER BY id DESC
+        WHERE id = :rid AND user_id = :uid
         LIMIT 1
     ");
     $stmt->execute([
-        ':uid' => $user_id,
-        ':gid' => $game_id
+        ':rid' => $identifier,
+        ':uid' => $user_id
     ]);
 
     $registration = $stmt->fetch(PDO::FETCH_ASSOC);
 
-    if ($registration) {
-        $reg_id = (int) $registration['id'];
+    if (!$registration) {
+        // Fallback на старый формат callback'а: enter_team_{game_id}
+        $game_id = $identifier;
 
-        // Сбрасываем предыдущее название команды, чтобы пользователь мог ввести новое
-        $stmtReset = $conn->prepare("UPDATE registrations SET team = NULL WHERE id = :rid");
-        $stmtReset->execute([':rid' => $reg_id]);
-    } else {
-        // Создаём новую регистрацию: только user_id, game_id, created_at
+        $stmtGame = $conn->prepare("
+            SELECT id
+            FROM games
+            WHERE id = :gid
+            LIMIT 1
+        ");
+        $stmtGame->execute([':gid' => $game_id]);
+
+        if (!$stmtGame->fetchColumn()) {
+            return;
+        }
+
         $stmtInsert = $conn->prepare("
             INSERT INTO registrations (user_id, game_id, created_at)
             VALUES (:uid, :gid, NOW())
@@ -164,6 +182,20 @@ function handle_enter_team_button($data, $chat_id, $user_id, $conn, $config, $ca
             ':uid' => $user_id,
             ':gid' => $game_id
         ]);
+
+        $registration = [
+            'id' => (int) $conn->lastInsertId(),
+            'game_id' => $game_id,
+            'team' => null
+        ];
+    }
+
+    $reg_id = (int) $registration['id'];
+
+    // Если команда уже есть, обнуляем её, чтобы пользователь мог ввести новую
+    if ($registration['team'] !== null && $registration['team'] !== '') {
+        $stmtReset = $conn->prepare("UPDATE registrations SET team = NULL WHERE id = :rid");
+        $stmtReset->execute([':rid' => $reg_id]);
     }
 
     // Сообщение-подсказка
