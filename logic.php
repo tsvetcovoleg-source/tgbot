@@ -102,16 +102,7 @@ function handle_register_button($data, $chat_id, $user_id, $conn, $config, $call
 
     if ($game) {
         // Фиксируем новую регистрацию сразу после нажатия кнопки
-        $stmtInsert = $conn->prepare("
-            INSERT INTO registrations (user_id, game_id, team, created_at)
-            VALUES (:uid, :gid, NULL, NOW())
-        ");
-        $stmtInsert->execute([
-            ':uid' => $user_id,
-            ':gid' => $game_id
-        ]);
-
-        $registrationId = (int) $conn->lastInsertId();
+        $registrationId = create_pending_registration($conn, $user_id, $game_id);
 
         // Формируем сообщение
         $msg = "✅ Вы зарегистрированы на игру:\n\n" .
@@ -174,17 +165,10 @@ function handle_enter_team_button($data, $chat_id, $user_id, $conn, $config, $ca
             return;
         }
 
-        $stmtInsert = $conn->prepare("
-            INSERT INTO registrations (user_id, game_id, team, created_at)
-            VALUES (:uid, :gid, NULL, NOW())
-        ");
-        $stmtInsert->execute([
-            ':uid' => $user_id,
-            ':gid' => $game_id
-        ]);
+        $newId = create_pending_registration($conn, $user_id, $game_id);
 
         $registration = [
-            'id' => (int) $conn->lastInsertId(),
+            'id' => $newId,
             'game_id' => $game_id,
             'team' => null
         ];
@@ -193,9 +177,12 @@ function handle_enter_team_button($data, $chat_id, $user_id, $conn, $config, $ca
     $reg_id = (int) $registration['id'];
 
     // Если команда уже есть, обнуляем её, чтобы пользователь мог ввести новую
-    if ($registration['team'] !== null && $registration['team'] !== '') {
-        $stmtReset = $conn->prepare("UPDATE registrations SET team = NULL WHERE id = :rid");
-        $stmtReset->execute([':rid' => $reg_id]);
+    if ($registration['team'] !== null && $registration['team'] !== '' && !is_pending_team($registration['team'])) {
+        $stmtReset = $conn->prepare("UPDATE registrations SET team = :team WHERE id = :rid");
+        $stmtReset->execute([
+            ':team' => generate_pending_team_token(),
+            ':rid' => $reg_id
+        ]);
     }
 
     // Сообщение-подсказка
@@ -234,7 +221,9 @@ function handle_free_text($text, $chat_id, $user_id, $conn, $config) {
     $stmt = $conn->prepare("
         SELECT id
         FROM registrations
-        WHERE user_id = :uid AND (team IS NULL OR team = '')
+        WHERE user_id = :uid AND (
+            team IS NULL OR team = '' OR team LIKE '__pending__%'
+        )
         ORDER BY id DESC
         LIMIT 1
     ");
@@ -258,6 +247,61 @@ function handle_free_text($text, $chat_id, $user_id, $conn, $config) {
 
     // Fallback — если незавершённых регистраций нет
     return "Спасибо за сообщение! Напишите /игры, чтобы посмотреть ближайшие события.";
+}
+
+
+function create_pending_registration(PDO $conn, int $user_id, int $game_id): int
+{
+    $stmt = $conn->prepare(
+        "INSERT INTO registrations (user_id, game_id, team, created_at)\n" .
+        "VALUES (:uid, :gid, :team, NOW())"
+    );
+
+    $attempts = 0;
+    $maxAttempts = 5;
+
+    do {
+        $attempts++;
+        $teamPlaceholder = generate_pending_team_token();
+
+        try {
+            $stmt->execute([
+                ':uid' => $user_id,
+                ':gid' => $game_id,
+                ':team' => $teamPlaceholder,
+            ]);
+
+            return (int) $conn->lastInsertId();
+        } catch (PDOException $e) {
+            if ($e->getCode() !== '23000') {
+                throw $e;
+            }
+
+            if ($attempts >= $maxAttempts) {
+                throw $e;
+            }
+        }
+    } while ($attempts < $maxAttempts);
+
+    throw new RuntimeException('Не удалось создать новую регистрацию.');
+}
+
+function generate_pending_team_token(): string
+{
+    try {
+        return '__pending__' . bin2hex(random_bytes(6));
+    } catch (Exception $e) {
+        return '__pending__' . uniqid();
+    }
+}
+
+function is_pending_team(?string $team): bool
+{
+    if ($team === null) {
+        return false;
+    }
+
+    return strncmp($team, '__pending__', 11) === 0;
 }
 
 
