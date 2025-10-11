@@ -1,6 +1,6 @@
 <?php
 
-function handle_message($text, $user_id, $chat_id, $config, $conn, $callback = null) {
+function handle_message($text, $user_id, $chat_id, $config, $conn, $callback = null, $message = null) {
     $text_lower = mb_strtolower(trim($text));
 
     // === Маршрутизация сообщений ===
@@ -16,7 +16,7 @@ function handle_message($text, $user_id, $chat_id, $config, $conn, $callback = n
     }
 
     // fallback для обычного текста
-    return handle_free_text($text, $chat_id, $user_id, $conn, $config);
+    return handle_free_text($text, $chat_id, $user_id, $conn, $config, $message);
 }
 
 function handle_callback($data, $user_id, $chat_id, $config, $conn, $callback) {
@@ -176,17 +176,26 @@ function handle_enter_team_button($data, $chat_id, $user_id, $conn, $config, $ca
 
     $reg_id = (int) $registration['id'];
 
+    $pendingToken = $registration['team'];
+
     // Если команда уже есть, обнуляем её, чтобы пользователь мог ввести новую
-    if ($registration['team'] !== null && $registration['team'] !== '' && !is_pending_team($registration['team'])) {
+    if ($pendingToken === null || $pendingToken === '' || !is_pending_team($pendingToken)) {
+        $pendingToken = generate_pending_team_token();
+
         $stmtReset = $conn->prepare("UPDATE registrations SET team = :team WHERE id = :rid");
         $stmtReset->execute([
-            ':team' => generate_pending_team_token(),
+            ':team' => $pendingToken,
             ':rid' => $reg_id
         ]);
     }
 
+    $publicCode = strtoupper(substr($pendingToken, 11));
+    if ($publicCode === '') {
+        $publicCode = strtoupper($pendingToken);
+    }
+
     // Сообщение-подсказка
-    $text = "📝 В ответе на это сообщение введите <b>название вашей команды</b>.";
+    $text = "📝 В ответе на это сообщение введите <b>название вашей команды</b>.\n\n🔖 Код заявки: #$publicCode";
 
     // Привязываем как «ответ» к сообщению с кнопкой (если есть message_id)
     $params = [
@@ -206,7 +215,7 @@ function handle_enter_team_button($data, $chat_id, $user_id, $conn, $config, $ca
 
 
 
-function handle_free_text($text, $chat_id, $user_id, $conn, $config) {
+function handle_free_text($text, $chat_id, $user_id, $conn, $config, $message = null) {
     if (!$user_id) {
         return 'Не удалось определить пользователя. Пожалуйста, отправьте команду /start.';
     }
@@ -217,18 +226,43 @@ function handle_free_text($text, $chat_id, $user_id, $conn, $config) {
         return 'Название команды не может быть пустым. Пожалуйста, отправьте текстовое название.';
     }
 
-    // Ищем самую свежую регистрацию без названия команды
-    $stmt = $conn->prepare("
-        SELECT id
-        FROM registrations
-        WHERE user_id = :uid AND (
-            team IS NULL OR team = '' OR team LIKE '__pending__%'
-        )
-        ORDER BY id DESC
-        LIMIT 1
-    ");
-    $stmt->execute([':uid' => $user_id]);
-    $reg_id = $stmt->fetchColumn();
+    $reg_id = null;
+
+    if (is_array($message) && isset($message['reply_to_message']['text'])) {
+        $replyText = $message['reply_to_message']['text'];
+
+        if (preg_match('/Код заявки:\s*#([A-Za-z0-9]+)/u', $replyText, $matches)) {
+            $token = '__pending__' . strtolower($matches[1]);
+
+            $stmtByToken = $conn->prepare("
+                SELECT id
+                FROM registrations
+                WHERE user_id = :uid AND team = :team
+                LIMIT 1
+            ");
+            $stmtByToken->execute([
+                ':uid' => $user_id,
+                ':team' => $token,
+            ]);
+
+            $reg_id = $stmtByToken->fetchColumn();
+        }
+    }
+
+    if (!$reg_id) {
+        // Ищем самую свежую регистрацию без названия команды
+        $stmt = $conn->prepare("
+            SELECT id
+            FROM registrations
+            WHERE user_id = :uid AND (
+                team IS NULL OR team = '' OR team LIKE '__pending__%'
+            )
+            ORDER BY id DESC
+            LIMIT 1
+        ");
+        $stmt->execute([':uid' => $user_id]);
+        $reg_id = $stmt->fetchColumn();
+    }
 
     if ($reg_id) {
         // Обновляем team тем, что прислал пользователь

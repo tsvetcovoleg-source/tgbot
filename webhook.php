@@ -100,7 +100,7 @@ if ($text !== '' && $user_id) {
 }
 
 // Получаем ответ из logic
-$reply = handle_message($text, $user_id, $chat_id, $config, $conn, null);
+$reply = handle_message($text, $user_id, $chat_id, $config, $conn, null, $message);
 
 // Отправка, если ответ не null
 if ($reply !== null && $reply !== '') {
