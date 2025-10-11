@@ -133,15 +133,38 @@ function handle_enter_team_button($data, $chat_id, $user_id, $conn, $config, $ca
     // Получаем game_id из callback_data: enter_team_{id}
     $game_id = (int) str_replace('enter_team_', '', $data);
 
-    // Создаём новую регистрацию: только user_id, game_id, created_at
+    // Проверяем, существует ли уже регистрация пользователя на эту игру
     $stmt = $conn->prepare("
-        INSERT INTO registrations (user_id, game_id, created_at)
-        VALUES (:uid, :gid, NOW())
+        SELECT id, team
+        FROM registrations
+        WHERE user_id = :uid AND game_id = :gid
+        ORDER BY id DESC
+        LIMIT 1
     ");
     $stmt->execute([
         ':uid' => $user_id,
         ':gid' => $game_id
     ]);
+
+    $registration = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    if ($registration) {
+        $reg_id = (int) $registration['id'];
+
+        // Сбрасываем предыдущее название команды, чтобы пользователь мог ввести новое
+        $stmtReset = $conn->prepare("UPDATE registrations SET team = NULL WHERE id = :rid");
+        $stmtReset->execute([':rid' => $reg_id]);
+    } else {
+        // Создаём новую регистрацию: только user_id, game_id, created_at
+        $stmtInsert = $conn->prepare("
+            INSERT INTO registrations (user_id, game_id, created_at)
+            VALUES (:uid, :gid, NOW())
+        ");
+        $stmtInsert->execute([
+            ':uid' => $user_id,
+            ':gid' => $game_id
+        ]);
+    }
 
     // Сообщение-подсказка
     $text = "📝 В ответе на это сообщение введите <b>название вашей команды</b>.";
