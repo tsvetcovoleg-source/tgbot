@@ -101,6 +101,9 @@ function handle_register_button($data, $chat_id, $user_id, $conn, $config, $call
     $game = $stmt->fetch(PDO::FETCH_ASSOC);
 
     if ($game) {
+        // Фиксируем новую регистрацию сразу после нажатия кнопки
+        $registrationId = create_pending_registration($conn, $user_id, $game_id);
+
         // Формируем сообщение
         $msg = "✅ Вы зарегистрированы на игру:\n\n" .
                "🎮 <b>{$game['game_number']}</b>\n" .
@@ -111,7 +114,7 @@ function handle_register_button($data, $chat_id, $user_id, $conn, $config, $call
         $keyboard = [
             'inline_keyboard' => [
                 [
-                    ['text' => '📝 Ввести название команды', 'callback_data' => 'enter_team_' . $game_id]
+                    ['text' => '📝 Ввести название команды', 'callback_data' => 'enter_team_' . $registrationId]
                 ]
             ]
         ];
@@ -130,18 +133,57 @@ function handle_register_button($data, $chat_id, $user_id, $conn, $config, $call
 }
 
 function handle_enter_team_button($data, $chat_id, $user_id, $conn, $config, $callback) {
-    // Получаем game_id из callback_data: enter_team_{id}
-    $game_id = (int) str_replace('enter_team_', '', $data);
+    // Получаем идентификатор из callback_data: enter_team_{registration_id} (новый формат)
+    $identifier = (int) str_replace('enter_team_', '', $data);
 
-    // Создаём новую регистрацию: только user_id, game_id, created_at
     $stmt = $conn->prepare("
-        INSERT INTO registrations (user_id, game_id, created_at)
-        VALUES (:uid, :gid, NOW())
+        SELECT id, game_id, team
+        FROM registrations
+        WHERE id = :rid AND user_id = :uid
+        LIMIT 1
     ");
     $stmt->execute([
-        ':uid' => $user_id,
-        ':gid' => $game_id
+        ':rid' => $identifier,
+        ':uid' => $user_id
     ]);
+
+    $registration = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    if (!$registration) {
+        // Fallback на старый формат callback'а: enter_team_{game_id}
+        $game_id = $identifier;
+
+        $stmtGame = $conn->prepare("
+            SELECT id
+            FROM games
+            WHERE id = :gid
+            LIMIT 1
+        ");
+        $stmtGame->execute([':gid' => $game_id]);
+
+        if (!$stmtGame->fetchColumn()) {
+            return;
+        }
+
+        $newId = create_pending_registration($conn, $user_id, $game_id);
+
+        $registration = [
+            'id' => $newId,
+            'game_id' => $game_id,
+            'team' => null
+        ];
+    }
+
+    $reg_id = (int) $registration['id'];
+
+    // Если команда уже есть, обнуляем её, чтобы пользователь мог ввести новую
+    if ($registration['team'] !== null && $registration['team'] !== '' && !is_pending_team($registration['team'])) {
+        $stmtReset = $conn->prepare("UPDATE registrations SET team = :team WHERE id = :rid");
+        $stmtReset->execute([
+            ':team' => generate_pending_team_token(),
+            ':rid' => $reg_id
+        ]);
+    }
 
     // Сообщение-подсказка
     $text = "📝 В ответе на это сообщение введите <b>название вашей команды</b>.";
@@ -179,7 +221,9 @@ function handle_free_text($text, $chat_id, $user_id, $conn, $config) {
     $stmt = $conn->prepare("
         SELECT id
         FROM registrations
-        WHERE user_id = :uid AND (team IS NULL OR team = '')
+        WHERE user_id = :uid AND (
+            team IS NULL OR team = '' OR team LIKE '__pending__%'
+        )
         ORDER BY id DESC
         LIMIT 1
     ");
@@ -203,6 +247,61 @@ function handle_free_text($text, $chat_id, $user_id, $conn, $config) {
 
     // Fallback — если незавершённых регистраций нет
     return "Спасибо за сообщение! Напишите /игры, чтобы посмотреть ближайшие события.";
+}
+
+
+function create_pending_registration(PDO $conn, int $user_id, int $game_id): int
+{
+    $stmt = $conn->prepare(
+        "INSERT INTO registrations (user_id, game_id, team, created_at)\n" .
+        "VALUES (:uid, :gid, :team, NOW())"
+    );
+
+    $attempts = 0;
+    $maxAttempts = 5;
+
+    do {
+        $attempts++;
+        $teamPlaceholder = generate_pending_team_token();
+
+        try {
+            $stmt->execute([
+                ':uid' => $user_id,
+                ':gid' => $game_id,
+                ':team' => $teamPlaceholder,
+            ]);
+
+            return (int) $conn->lastInsertId();
+        } catch (PDOException $e) {
+            if ($e->getCode() !== '23000') {
+                throw $e;
+            }
+
+            if ($attempts >= $maxAttempts) {
+                throw $e;
+            }
+        }
+    } while ($attempts < $maxAttempts);
+
+    throw new RuntimeException('Не удалось создать новую регистрацию.');
+}
+
+function generate_pending_team_token(): string
+{
+    try {
+        return '__pending__' . bin2hex(random_bytes(6));
+    } catch (Exception $e) {
+        return '__pending__' . uniqid();
+    }
+}
+
+function is_pending_team(?string $team): bool
+{
+    if ($team === null) {
+        return false;
+    }
+
+    return strncmp($team, '__pending__', 11) === 0;
 }
 
 
