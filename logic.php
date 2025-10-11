@@ -102,7 +102,14 @@ function handle_register_button($data, $chat_id, $user_id, $conn, $config, $call
 
     if ($game) {
         // Фиксируем новую регистрацию сразу после нажатия кнопки
-        $registrationId = create_pending_registration($conn, $user_id, $game_id);
+        try {
+            $registrationId = create_pending_registration($conn, $user_id, $game_id);
+        } catch (Throwable $e) {
+            $errorText = "❌ Не удалось создать новую регистрацию. Пожалуйста, попробуйте ещё раз чуть позже.";
+            send_telegram($config, $chat_id, $errorText, null, 'HTML');
+            log_bot_message($user_id, strip_tags($errorText), $conn);
+            return;
+        }
 
         // Формируем сообщение
         $msg = "✅ Вы зарегистрированы на игру:\n\n" .
@@ -286,6 +293,8 @@ function create_pending_registration(PDO $conn, int $user_id, int $game_id): int
                 throw $e;
             }
 
+            ensure_multiple_registrations_allowed($conn);
+
             if ($attempts >= $maxAttempts) {
                 throw $e;
             }
@@ -293,6 +302,47 @@ function create_pending_registration(PDO $conn, int $user_id, int $game_id): int
     } while ($attempts < $maxAttempts);
 
     throw new RuntimeException('Не удалось создать новую регистрацию.');
+}
+
+function ensure_multiple_registrations_allowed(PDO $conn): void
+{
+    static $attempted = false;
+
+    if ($attempted) {
+        return;
+    }
+
+    $attempted = true;
+
+    try {
+        $sql = "
+            SELECT INDEX_NAME, GROUP_CONCAT(COLUMN_NAME ORDER BY SEQ_IN_INDEX) AS cols
+            FROM INFORMATION_SCHEMA.STATISTICS
+            WHERE TABLE_SCHEMA = DATABASE()
+              AND TABLE_NAME = 'registrations'
+              AND NON_UNIQUE = 0
+              AND INDEX_NAME <> 'PRIMARY'
+            GROUP BY INDEX_NAME
+        ";
+
+        $stmt = $conn->query($sql);
+
+        $indexes = $stmt ? $stmt->fetchAll(PDO::FETCH_ASSOC) : [];
+
+        foreach ($indexes as $index) {
+            $columns = explode(',', $index['cols']);
+            $normalized = array_map('trim', $columns);
+
+            sort($normalized);
+
+            if ($normalized === ['game_id', 'user_id']) {
+                $indexName = str_replace('`', '``', $index['INDEX_NAME']);
+                $conn->exec("ALTER TABLE registrations DROP INDEX `{$indexName}`");
+            }
+        }
+    } catch (PDOException $e) {
+        // Если не удалось изменить схему (нет прав или индекс уже удалён), просто продолжаем попытки вставки.
+    }
 }
 
 function generate_pending_team_token(): string
