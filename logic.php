@@ -268,10 +268,8 @@ function handle_free_text($text, $chat_id, $user_id, $conn, $config) {
 
 function create_pending_registration(PDO $conn, int $user_id, int $game_id): int
 {
-    $stmt = $conn->prepare(
-        "INSERT INTO registrations (user_id, game_id, team, created_at)\n" .
-        "VALUES (:uid, :gid, :team, NOW())"
-    );
+    $sql = "INSERT INTO registrations (user_id, game_id, team, created_at)\n" .
+           "VALUES (:uid, :gid, :team, NOW())";
 
     $attempts = 0;
     $maxAttempts = 5;
@@ -279,6 +277,7 @@ function create_pending_registration(PDO $conn, int $user_id, int $game_id): int
     do {
         $attempts++;
         $teamPlaceholder = generate_pending_team_token();
+        $stmt = $conn->prepare($sql);
 
         try {
             $stmt->execute([
@@ -289,11 +288,15 @@ function create_pending_registration(PDO $conn, int $user_id, int $game_id): int
 
             return (int) $conn->lastInsertId();
         } catch (PDOException $e) {
-            if ($e->getCode() !== '23000') {
+            $errorCode = $e->getCode();
+
+            if ($errorCode === '23000') {
+                ensure_multiple_registrations_allowed($conn);
+            } elseif ($errorCode === 'HY000' && isset($e->errorInfo[1]) && (int) $e->errorInfo[1] === 1615) {
+                // MySQL can request a statement to be re-prepared after schema changes.
+            } else {
                 throw $e;
             }
-
-            ensure_multiple_registrations_allowed($conn);
 
             if ($attempts >= $maxAttempts) {
                 throw $e;
