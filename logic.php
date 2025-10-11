@@ -103,8 +103,8 @@ function handle_register_button($data, $chat_id, $user_id, $conn, $config, $call
     if ($game) {
         // Фиксируем новую регистрацию сразу после нажатия кнопки
         $stmtInsert = $conn->prepare("
-            INSERT INTO registrations (user_id, game_id, created_at)
-            VALUES (:uid, :gid, NOW())
+            INSERT INTO registrations (user_id, game_id, team, created_at)
+            VALUES (:uid, :gid, NULL, NOW())
         ");
         $stmtInsert->execute([
             ':uid' => $user_id,
@@ -175,8 +175,8 @@ function handle_enter_team_button($data, $chat_id, $user_id, $conn, $config, $ca
         }
 
         $stmtInsert = $conn->prepare("
-            INSERT INTO registrations (user_id, game_id, created_at)
-            VALUES (:uid, :gid, NOW())
+            INSERT INTO registrations (user_id, game_id, team, created_at)
+            VALUES (:uid, :gid, NULL, NOW())
         ");
         $stmtInsert->execute([
             ':uid' => $user_id,
