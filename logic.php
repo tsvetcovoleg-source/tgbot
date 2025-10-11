@@ -149,7 +149,21 @@ function handle_enter_team_button($data, $chat_id, $user_id, $conn, $config, $ca
 
     $registration = $stmt->fetch(PDO::FETCH_ASSOC);
 
-    if (!$registration) {
+    $isAdditionalTeam = false;
+
+    if ($registration) {
+        // Если регистрация уже завершена (команда указана), создаём новую запись,
+        // чтобы текущая команда осталась в базе, а пользователь смог добавить ещё одну.
+        if ($registration['team'] !== null && $registration['team'] !== '' && !is_pending_team($registration['team'])) {
+            $newId = create_pending_registration($conn, $user_id, (int) $registration['game_id']);
+            $registration = [
+                'id' => $newId,
+                'game_id' => (int) $registration['game_id'],
+                'team' => null,
+            ];
+            $isAdditionalTeam = true;
+        }
+    } else {
         // Fallback на старый формат callback'а: enter_team_{game_id}
         $game_id = $identifier;
 
@@ -176,17 +190,12 @@ function handle_enter_team_button($data, $chat_id, $user_id, $conn, $config, $ca
 
     $reg_id = (int) $registration['id'];
 
-    // Если команда уже есть, обнуляем её, чтобы пользователь мог ввести новую
-    if ($registration['team'] !== null && $registration['team'] !== '' && !is_pending_team($registration['team'])) {
-        $stmtReset = $conn->prepare("UPDATE registrations SET team = :team WHERE id = :rid");
-        $stmtReset->execute([
-            ':team' => generate_pending_team_token(),
-            ':rid' => $reg_id
-        ]);
-    }
-
     // Сообщение-подсказка
     $text = "📝 В ответе на это сообщение введите <b>название вашей команды</b>.";
+
+    if ($isAdditionalTeam) {
+        $text .= "\n\n➕ Эта запись позволит добавить ещё одну команду на выбранную игру.";
+    }
 
     // Привязываем как «ответ» к сообщению с кнопкой (если есть message_id)
     $params = [
