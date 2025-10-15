@@ -85,6 +85,29 @@ $tg_user = $message['from'];
 $chat_id = $tg_user['id'];
 $text = trim($message['text'] ?? '');
 
+$loggedText = $text;
+
+if ($text !== '') {
+    $textLower = mb_strtolower($text);
+    if (strpos($textLower, '/start') === 0) {
+        $payload = trim(mb_substr($text, mb_strlen('/start')));
+
+        if (strpos($payload, 'register_') === 0) {
+            $gameId = (int) mb_substr($payload, mb_strlen('register_'));
+
+            if ($gameId > 0) {
+                $stmt = $conn->prepare('SELECT game_number FROM games WHERE id = :id LIMIT 1');
+                $stmt->execute([':id' => $gameId]);
+                $gameNumber = $stmt->fetchColumn();
+
+                if ($gameNumber !== false) {
+                    $loggedText = 'Я хочу зарегистрироваться на игру (' . $gameNumber . ')';
+                }
+            }
+        }
+    }
+}
+
 $user_id = sync_user($conn, $tg_user);
 
 // Сохраняем входящее сообщение
@@ -95,7 +118,7 @@ if ($text !== '' && $user_id) {
     ");
     $stmt->execute([
         ':uid' => $user_id,
-        ':msg' => $text
+        ':msg' => $loggedText
     ]);
 }
 
