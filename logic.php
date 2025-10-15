@@ -23,6 +23,13 @@ function handle_message($text, $user_id, $chat_id, $config, $conn, $callback = n
         return $routes[$text_lower]($chat_id, $user_id, $conn, $config);
     }
 
+    if (preg_match('/^\s*я\s+хочу\s+зарегистрироваться\s+на\s+игру\s+[«"]?(?P<title>.+?)[»"]?\s*$/ui', $original_text, $match)) {
+        $gameTitle = trim($match['title']);
+        if ($gameTitle !== '') {
+            return handle_text_registration_request($gameTitle, $chat_id, $user_id, $conn, $config);
+        }
+    }
+
     // fallback для обычного текста
     return handle_free_text($text, $chat_id, $user_id, $conn, $config);
 }
@@ -93,17 +100,24 @@ function handle_games_command($chat_id, $user_id, $conn, $config) {
     $messages = [];
 
     foreach ($games as $game) {
-        $deepLink = sprintf(
-            'https://t.me/%s?start=register_%d',
-            urlencode($config['bot_username']),
-            $game['id']
+        $gameNumberEscaped = htmlspecialchars($game['game_number'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+        $gameDateEscaped = htmlspecialchars($game['game_date'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+        $startTimeEscaped = htmlspecialchars($game['start_time'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+        $locationEscaped = htmlspecialchars($game['location'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+        $priceEscaped = htmlspecialchars($game['price'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+
+        $shareText = sprintf('Я хочу зарегистрироваться на игру «%s»', $game['game_number']);
+        $shareLink = sprintf(
+            'tg://resolve?domain=%s&text=%s',
+            rawurlencode($config['bot_username']),
+            rawurlencode($shareText)
         );
 
-        $messages[] = "🎮 <b>{$game['game_number']}</b>\n" .
-            "📅 {$game['game_date']} в {$game['start_time']}\n" .
-            "📍 {$game['location']}\n" .
-            "💰 {$game['price']}\n\n" .
-            '<a href="' . htmlspecialchars($deepLink, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '">📥 Зарегистрироваться на игру</a>';
+        $messages[] = "🎮 <b>{$gameNumberEscaped}</b>\n" .
+            "📅 {$gameDateEscaped} в {$startTimeEscaped}\n" .
+            "📍 {$locationEscaped}\n" .
+            "💰 {$priceEscaped}\n\n" .
+            '<a href="' . htmlspecialchars($shareLink, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '">📥 Зарегистрироваться на игру</a>';
     }
 
     $text = "📋 <b>Список доступных игр:</b>\n\n" . implode("\n\n", $messages);
@@ -117,6 +131,30 @@ function handle_games_command($chat_id, $user_id, $conn, $config) {
 function handle_register_button($data, $chat_id, $user_id, $conn, $config, $callback) {
     $game_id = (int) str_replace('register_', '', $data);
 
+    send_registration_confirmation($game_id, $chat_id, $user_id, $conn, $config);
+}
+
+function handle_text_registration_request($gameTitle, $chat_id, $user_id, $conn, $config) {
+    $stmt = $conn->prepare("
+        SELECT id
+        FROM games
+        WHERE game_number = :title
+        LIMIT 1
+    ");
+    $stmt->execute([':title' => $gameTitle]);
+    $game_id = $stmt->fetchColumn();
+
+    if ($game_id) {
+        send_registration_confirmation((int) $game_id, $chat_id, $user_id, $conn, $config);
+        return null;
+    }
+
+    $message = '❌ Не удалось найти игру с таким названием. Пожалуйста, выберите её из списка ещё раз.';
+    send_reply($config, $chat_id, $message, null, $user_id, $conn);
+    return null;
+}
+
+function send_registration_confirmation($game_id, $chat_id, $user_id, $conn, $config) {
     // Берём данные игры
     $stmt = $conn->prepare("
         SELECT game_number, game_date, start_time, location
@@ -130,9 +168,9 @@ function handle_register_button($data, $chat_id, $user_id, $conn, $config, $call
     if ($game) {
         // Формируем сообщение
         $msg = "✅ Вы зарегистрированы на игру:\n\n" .
-               "🎮 <b>{$game['game_number']}</b>\n" .
-               "📅 {$game['game_date']} в {$game['start_time']}\n" .
-               "📍 {$game['location']}";
+               "🎮 <b>" . htmlspecialchars($game['game_number'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . "</b>\n" .
+               "📅 " . htmlspecialchars($game['game_date'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . " в " . htmlspecialchars($game['start_time'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . "\n" .
+               "📍 " . htmlspecialchars($game['location'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
 
         // Инлайн-кнопка "Ввести название команды"
         $keyboard = [
