@@ -2,6 +2,7 @@
 return [
     'bot_token' => '7170378380:AAFCH65ZxOg4mnraSGynxtpiMGrnOB7OocM',
     'api_url' => 'https://api.telegram.org/bot7170378380:AAFCH65ZxOg4mnraSGynxtpiMGrnOB7OocM/',
+    'bot_username' => 'MindGamesPubQuizBot',
     'group_chat_id' => '-1001234567890', // ID супергруппы для логов (заменим позже)
     'db' => [
         'host' => 'localhost',
