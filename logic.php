@@ -90,6 +90,8 @@ function handle_games_command($chat_id, $user_id, $conn, $config) {
         return null;
     }
 
+    $messages = [];
+
     foreach ($games as $game) {
         $deepLink = sprintf(
             'https://t.me/%s?start=register_%d',
@@ -97,12 +99,17 @@ function handle_games_command($chat_id, $user_id, $conn, $config) {
             $game['id']
         );
 
-        $text = "🎮 <b>{$game['game_number']}</b>\n📅 {$game['game_date']} в {$game['start_time']}\n📍 {$game['location']}\n💰 {$game['price']}\n\n" .
+        $messages[] = "🎮 <b>{$game['game_number']}</b>\n" .
+            "📅 {$game['game_date']} в {$game['start_time']}\n" .
+            "📍 {$game['location']}\n" .
+            "💰 {$game['price']}\n\n" .
             '<a href="' . htmlspecialchars($deepLink, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '">📥 Зарегистрироваться на игру</a>';
-
-        send_telegram($config, $chat_id, $text, null, 'HTML');
-        log_bot_message($user_id, strip_tags($text), $conn);
     }
+
+    $text = "📋 <b>Список доступных игр:</b>\n\n" . implode("\n\n", $messages);
+
+    send_telegram($config, $chat_id, $text, null, 'HTML');
+    log_bot_message($user_id, strip_tags($text), $conn);
 
     return null;
 }
