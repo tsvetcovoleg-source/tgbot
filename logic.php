@@ -1,13 +1,13 @@
 <?php
 
-function handle_message($text, $user_id, $chat_id, $config, $conn, $callback = null) {
+function handle_message($text, $user_id, $chat_id, $config, $conn, $callback = null, $telegramMessageId = null, $storedMessageId = null) {
     $original_text = trim($text);
     $text_lower = mb_strtolower($original_text);
 
     if (strpos($text_lower, '/start') === 0) {
         $payload = trim(mb_substr($original_text, mb_strlen('/start')));
         if ($payload !== '') {
-            return handle_start_with_payload($chat_id, $user_id, $conn, $config, $payload);
+            return handle_start_with_payload($chat_id, $user_id, $conn, $config, $payload, $telegramMessageId, $storedMessageId);
         }
     }
 
@@ -34,12 +34,30 @@ function handle_message($text, $user_id, $chat_id, $config, $conn, $callback = n
     return handle_free_text($text, $chat_id, $user_id, $conn, $config);
 }
 
-function handle_start_with_payload($chat_id, $user_id, $conn, $config, $payload) {
+function handle_start_with_payload($chat_id, $user_id, $conn, $config, $payload, $telegramMessageId = null, $storedMessageId = null)
+{
     if (strpos($payload, 'register_') === 0) {
         $game_id = (int) mb_substr($payload, mb_strlen('register_'));
         if ($game_id > 0) {
-            $data = 'register_' . $game_id;
-            return handle_register_button($data, $chat_id, $user_id, $conn, $config, null);
+            $game = fetch_game_by_id($conn, $game_id);
+
+            if ($game) {
+                $userRequestText = sprintf('Я хочу зарегистрироваться на игру «%s»', $game['game_number']);
+
+                if ($storedMessageId) {
+                    overwrite_logged_message($conn, $storedMessageId, $userRequestText);
+                }
+
+                if ($telegramMessageId) {
+                    delete_message_silently($config, $chat_id, $telegramMessageId);
+                }
+
+                send_user_request_echo($config, $chat_id, $userRequestText);
+
+                return handle_register_button('register_' . $game_id, $chat_id, $user_id, $conn, $config, null, $game);
+            }
+
+            return handle_register_button('register_' . $game_id, $chat_id, $user_id, $conn, $config, null);
         }
     }
 
@@ -54,7 +72,7 @@ function handle_callback($data, $user_id, $chat_id, $config, $conn, $callback) {
 
     // было: if (str_starts_with($data, 'register_')) {
     if (strpos($data, 'register_') === 0) {
-        return handle_register_button($data, $chat_id, $user_id, $conn, $config, $callback);
+        return handle_register_button($data, $chat_id, $user_id, $conn, $config, $callback, null);
     }
 
     if (strpos($data, 'enter_team_') === 0) {
@@ -106,11 +124,11 @@ function handle_games_command($chat_id, $user_id, $conn, $config) {
         $locationEscaped = htmlspecialchars($game['location'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
         $priceEscaped = htmlspecialchars($game['price'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
 
-        $shareText = sprintf('Я хочу зарегистрироваться на игру «%s»', $game['game_number']);
+        $botUsername = ltrim($config['bot_username'], '@');
         $shareLink = sprintf(
-            'tg://resolve?domain=%s&text=%s',
-            rawurlencode($config['bot_username']),
-            rawurlencode($shareText)
+            'https://t.me/%s?start=register_%d',
+            rawurlencode($botUsername),
+            (int) $game['id']
         );
 
         $messages[] = "🎮 <b>{$gameNumberEscaped}</b>\n" .
@@ -128,10 +146,10 @@ function handle_games_command($chat_id, $user_id, $conn, $config) {
     return null;
 }
 
-function handle_register_button($data, $chat_id, $user_id, $conn, $config, $callback) {
+function handle_register_button($data, $chat_id, $user_id, $conn, $config, $callback, $prefetchedGame = null) {
     $game_id = (int) str_replace('register_', '', $data);
 
-    send_registration_confirmation($game_id, $chat_id, $user_id, $conn, $config);
+    send_registration_confirmation($game_id, $chat_id, $user_id, $conn, $config, $prefetchedGame);
 }
 
 function handle_text_registration_request($gameTitle, $chat_id, $user_id, $conn, $config) {
@@ -154,16 +172,8 @@ function handle_text_registration_request($gameTitle, $chat_id, $user_id, $conn,
     return null;
 }
 
-function send_registration_confirmation($game_id, $chat_id, $user_id, $conn, $config) {
-    // Берём данные игры
-    $stmt = $conn->prepare("
-        SELECT game_number, game_date, start_time, location
-        FROM games
-        WHERE id = :id
-        LIMIT 1
-    ");
-    $stmt->execute([':id' => $game_id]);
-    $game = $stmt->fetch(PDO::FETCH_ASSOC);
+function send_registration_confirmation($game_id, $chat_id, $user_id, $conn, $config, $prefetchedGame = null) {
+    $game = $prefetchedGame ?? fetch_game_by_id($conn, $game_id);
 
     if ($game) {
         // Формируем сообщение
@@ -293,6 +303,65 @@ function handle_free_text($text, $chat_id, $user_id, $conn, $config) {
     return "Спасибо за сообщение! Напишите /игры, чтобы посмотреть ближайшие события.";
 }
 
+
+# --------------------- ДОПОЛНИТЕЛЬНЫЕ ХЕЛПЕРЫ ----------------------
+
+function fetch_game_by_id($conn, $game_id)
+{
+    $stmt = $conn->prepare("
+        SELECT id, game_number, game_date, start_time, location
+        FROM games
+        WHERE id = :id
+        LIMIT 1
+    ");
+    $stmt->execute([':id' => $game_id]);
+    $game = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    return $game !== false ? $game : null;
+}
+
+function overwrite_logged_message($conn, $messageId, $text)
+{
+    if (!$messageId) {
+        return;
+    }
+
+    $stmt = $conn->prepare("UPDATE messages SET message = :msg WHERE id = :id");
+    $stmt->execute([
+        ':msg' => $text,
+        ':id'  => $messageId
+    ]);
+}
+
+function delete_message_silently($config, $chat_id, $telegramMessageId)
+{
+    if (!$telegramMessageId) {
+        return false;
+    }
+
+    $response = telegram_request($config, 'deleteMessage', [
+        'chat_id'    => $chat_id,
+        'message_id' => $telegramMessageId
+    ]);
+
+    if ($response === null) {
+        return false;
+    }
+
+    if (isset($response['ok'])) {
+        return (bool) $response['ok'];
+    }
+
+    return true;
+}
+
+function send_user_request_echo($config, $chat_id, $text)
+{
+    telegram_request($config, 'sendMessage', [
+        'chat_id' => $chat_id,
+        'text'    => $text
+    ]);
+}
 
 # --------------------- УТИЛИТЫ ----------------------
 

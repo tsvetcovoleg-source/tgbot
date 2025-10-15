@@ -84,8 +84,11 @@ if (!$message) exit;
 $tg_user = $message['from'];
 $chat_id = $tg_user['id'];
 $text = trim($message['text'] ?? '');
+$telegram_message_id = $message['message_id'] ?? null;
 
 $user_id = sync_user($conn, $tg_user);
+
+$stored_message_id = null;
 
 // Сохраняем входящее сообщение
 if ($text !== '' && $user_id) {
@@ -97,10 +100,12 @@ if ($text !== '' && $user_id) {
         ':uid' => $user_id,
         ':msg' => $text
     ]);
+
+    $stored_message_id = (int) $conn->lastInsertId();
 }
 
 // Получаем ответ из logic
-$reply = handle_message($text, $user_id, $chat_id, $config, $conn, null);
+$reply = handle_message($text, $user_id, $chat_id, $config, $conn, null, $telegram_message_id, $stored_message_id);
 
 // Отправка, если ответ не null
 if ($reply !== null && $reply !== '') {
