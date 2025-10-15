@@ -1,7 +1,15 @@
 <?php
 
 function handle_message($text, $user_id, $chat_id, $config, $conn, $callback = null) {
-    $text_lower = mb_strtolower(trim($text));
+    $original_text = trim($text);
+    $text_lower = mb_strtolower($original_text);
+
+    if (strpos($text_lower, '/start') === 0) {
+        $payload = trim(mb_substr($original_text, mb_strlen('/start')));
+        if ($payload !== '') {
+            return handle_start_with_payload($chat_id, $user_id, $conn, $config, $payload);
+        }
+    }
 
     // === Маршрутизация сообщений ===
     $routes = [
@@ -17,6 +25,18 @@ function handle_message($text, $user_id, $chat_id, $config, $conn, $callback = n
 
     // fallback для обычного текста
     return handle_free_text($text, $chat_id, $user_id, $conn, $config);
+}
+
+function handle_start_with_payload($chat_id, $user_id, $conn, $config, $payload) {
+    if (strpos($payload, 'register_') === 0) {
+        $game_id = (int) mb_substr($payload, mb_strlen('register_'));
+        if ($game_id > 0) {
+            $data = 'register_' . $game_id;
+            return handle_register_button($data, $chat_id, $user_id, $conn, $config, null);
+        }
+    }
+
+    return handle_start_command($chat_id, $user_id, $conn, $config);
 }
 
 function handle_callback($data, $user_id, $chat_id, $config, $conn, $callback) {
@@ -71,16 +91,16 @@ function handle_games_command($chat_id, $user_id, $conn, $config) {
     }
 
     foreach ($games as $game) {
-        $text = "🎮 <b>{$game['game_number']}</b>\n📅 {$game['game_date']} в {$game['start_time']}\n📍 {$game['location']}\n💰 {$game['price']}";
-        $keyboard = [
-            'inline_keyboard' => [
-                [
-                    ['text' => '📥 Зарегистрироваться на игру', 'callback_data' => 'register_' . $game['id']]
-                ]
-            ]
-        ];
+        $deepLink = sprintf(
+            'https://t.me/%s?start=register_%d',
+            urlencode($config['bot_username']),
+            $game['id']
+        );
 
-        send_telegram($config, $chat_id, $text, $keyboard, 'HTML');
+        $text = "🎮 <b>{$game['game_number']}</b>\n📅 {$game['game_date']} в {$game['start_time']}\n📍 {$game['location']}\n💰 {$game['price']}\n\n" .
+            '<a href="' . htmlspecialchars($deepLink, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '">📥 Зарегистрироваться на игру</a>';
+
+        send_telegram($config, $chat_id, $text, null, 'HTML');
         log_bot_message($user_id, strip_tags($text), $conn);
     }
 
