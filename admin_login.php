@@ -9,25 +9,22 @@ $config = require __DIR__ . '/config.php';
 $conn = get_connection($config);
 
 $body = json_decode(file_get_contents('php://input'), true);
-$idToken = $body['credential'] ?? '';
+$email = trim($body['email'] ?? '');
+$password = (string) ($body['password'] ?? '');
 
-$googleData = verify_google_token($idToken, $config['google_client_id'] ?? '');
-if (!$googleData) {
-    http_response_code(401);
-    echo json_encode(['error' => 'Не удалось подтвердить токен Google']);
+if ($email === '' || $password === '') {
+    http_response_code(400);
+    echo json_encode(['error' => 'Укажите email и пароль']);
     exit;
 }
 
-$email = $googleData['email'] ?? '';
 $admin = find_admin_by_email($conn, $email);
-
-if (!$admin) {
-    http_response_code(403);
-    echo json_encode(['error' => 'У вашего аккаунта нет доступа к админке']);
+if (!$admin || !isset($admin['password_hash']) || !password_verify($password, $admin['password_hash'])) {
+    http_response_code(401);
+    echo json_encode(['error' => 'Неверный email или пароль']);
     exit;
 }
 
-$_SESSION['admin_email'] = $email;
-$_SESSION['admin_name'] = $googleData['name'] ?? $email;
+$_SESSION['admin_email'] = $admin['email'];
 
-echo json_encode(['success' => true, 'email' => $email]);
+echo json_encode(['success' => true, 'email' => $admin['email']]);
