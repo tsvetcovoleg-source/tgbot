@@ -46,3 +46,35 @@ function telegram_request(array $config, string $method, array $params = []): ?a
 
     return $decoded;
 }
+
+function get_bot_username(array $config): ?string
+{
+    static $cachedUsername = null;
+
+    if ($cachedUsername !== null) {
+        return $cachedUsername;
+    }
+
+    $configured = isset($config['bot_username']) ? trim((string) $config['bot_username']) : '';
+
+    // Пытаемся получить актуальное имя бота из Bot API, чтобы диплинки всегда были корректными
+    $response = telegram_request($config, 'getMe');
+    if (
+        is_array($response)
+        && isset($response['ok'], $response['result']['username'])
+        && $response['ok'] === true
+        && $response['result']['username'] !== ''
+    ) {
+        $cachedUsername = ltrim($response['result']['username'], '@');
+        return $cachedUsername;
+    }
+
+    if ($configured !== '') {
+        $cachedUsername = ltrim($configured, '@');
+        return $cachedUsername;
+    }
+
+    error_log('Unable to determine bot username for deep links.');
+
+    return null;
+}
