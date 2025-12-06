@@ -4,8 +4,6 @@ require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/admin_auth.php';
 
 $config = require __DIR__ . '/config.php';
-$googleClientId = $config['google_client_id'] ?? '';
-$googleClientMissing = $googleClientId === '';
 $conn = get_connection($config);
 $users = [];
 
@@ -19,7 +17,6 @@ if (admin_logged_in()) {
 <head>
     <meta charset="UTF-8">
     <title>Админка MindGames Bot</title>
-    <script src="https://accounts.google.com/gsi/client" async defer></script>
     <style>
         body { font-family: Arial, sans-serif; background: #f5f5f5; padding: 24px; }
         .card { background: #fff; padding: 20px; border-radius: 12px; box-shadow: 0 2px 6px rgba(0,0,0,0.1); margin-bottom: 20px; }
@@ -30,6 +27,8 @@ if (admin_logged_in()) {
         button:hover { background: #0052cc; }
         .success { color: green; }
         .error { color: #c00; }
+        .muted { color: #666; }
+        .link { color: #0066ff; text-decoration: none; }
     </style>
 </head>
 <body>
@@ -37,20 +36,18 @@ if (admin_logged_in()) {
 
     <?php if (!admin_logged_in()): ?>
         <div class="card">
-            <p>Войдите через Google, чтобы управлять играми и отправлять сообщения.</p>
-            <?php if ($googleClientMissing): ?>
-                <p class="error">Укажите Google OAuth Client ID в config.php или через переменную окружения GOOGLE_CLIENT_ID.</p>
-            <?php else: ?>
-                <div id="g_id_onload"
-                     data-client_id="<?php echo htmlspecialchars($googleClientId, ENT_QUOTES); ?>"
-                     data-context="signin"
-                     data-ux_mode="popup"
-                     data-callback="handleCredentialResponse"
-                     data-auto_select="false">
-                </div>
-                <div class="g_id_signin" data-type="standard" data-shape="rectangular" data-theme="outline" data-text="signin_with" data-size="large" data-logo_alignment="left"></div>
+            <p>Введите email и пароль администратора, чтобы получить доступ.</p>
+            <form id="login-form">
+                <label for="login-email">Email</label>
+                <input type="email" id="login-email" name="email" required>
+
+                <label for="login-password">Пароль</label>
+                <input type="password" id="login-password" name="password" required>
+
+                <button type="submit">Войти</button>
                 <p id="login-status" class="error"></p>
-            <?php endif; ?>
+            </form>
+            <p class="muted">Нужно создать аккаунт? Используйте страницу <a class="link" href="create_admin.php">добавления администратора</a>.</p>
         </div>
     <?php else: ?>
         <div class="card">
@@ -118,23 +115,32 @@ if (admin_logged_in()) {
     <?php endif; ?>
 
 <script>
-function handleCredentialResponse(response) {
-    const status = document.getElementById('login-status');
-    status.textContent = '';
+const loginForm = document.getElementById('login-form');
+if (loginForm) {
+    loginForm.addEventListener('submit', function (e) {
+        e.preventDefault();
+        const status = document.getElementById('login-status');
+        status.textContent = '';
 
-    fetch('admin_login.php', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({credential: response.credential})
-    }).then(async (res) => {
-        const data = await res.json();
-        if (res.ok) {
-            window.location.reload();
-        } else {
-            status.textContent = data.error || 'Ошибка авторизации';
-        }
-    }).catch(() => {
-        status.textContent = 'Ошибка сети при авторизации';
+        const payload = {
+            email: document.getElementById('login-email').value,
+            password: document.getElementById('login-password').value,
+        };
+
+        fetch('admin_login.php', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(payload)
+        }).then(async (res) => {
+            const data = await res.json();
+            if (res.ok) {
+                window.location.reload();
+            } else {
+                status.textContent = data.error || 'Ошибка авторизации';
+            }
+        }).catch(() => {
+            status.textContent = 'Ошибка сети при авторизации';
+        });
     });
 }
 
