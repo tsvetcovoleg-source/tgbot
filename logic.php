@@ -7,8 +7,11 @@ function handle_message($text, $user_id, $chat_id, $config, $conn, $callback = n
     if (strpos($text_lower, '/start') === 0) {
         $payload = trim(mb_substr($original_text, mb_strlen('/start')));
         if ($payload !== '') {
+            update_user_status($conn, $user_id, 1);
             return handle_start_with_payload($chat_id, $user_id, $conn, $config, $payload, $telegramMessageId, $storedMessageId);
         }
+
+        update_user_status($conn, $user_id, 1);
     }
 
     // === Маршрутизация сообщений ===
@@ -20,12 +23,14 @@ function handle_message($text, $user_id, $chat_id, $config, $conn, $callback = n
     ];
 
     if (isset($routes[$text_lower])) {
+        update_user_status($conn, $user_id, 1);
         return $routes[$text_lower]($chat_id, $user_id, $conn, $config);
     }
 
     if (preg_match('/^\s*я\s+хочу\s+зарегистрироваться\s+на\s+игру\s+[«"]?(?P<title>.+?)[»"]?\s*$/ui', $original_text, $match)) {
         $gameTitle = trim($match['title']);
         if ($gameTitle !== '') {
+            update_user_status($conn, $user_id, 1);
             return handle_text_registration_request($gameTitle, $chat_id, $user_id, $conn, $config);
         }
     }
@@ -36,6 +41,8 @@ function handle_message($text, $user_id, $chat_id, $config, $conn, $callback = n
 
 function handle_start_with_payload($chat_id, $user_id, $conn, $config, $payload, $telegramMessageId = null, $storedMessageId = null)
 {
+    update_user_status($conn, $user_id, 1);
+
     if ($payload === 'quiz') {
         if ($telegramMessageId) {
             delete_message_silently($config, $chat_id, $telegramMessageId);
@@ -87,6 +94,8 @@ function handle_start_with_payload($chat_id, $user_id, $conn, $config, $payload,
 }
 
 function handle_callback($data, $user_id, $chat_id, $config, $conn, $callback) {
+    update_user_status($conn, $user_id, 1);
+
     // === Маршрутизация callback'ов ===
     if ($data === 'show_games') {
         return handle_games_command($chat_id, $user_id, $conn, $config);
@@ -207,6 +216,8 @@ function handle_games_by_types($chat_id, $user_id, $conn, $config, array $types,
 }
 
 function handle_text_registration_request($gameTitle, $chat_id, $user_id, $conn, $config) {
+    update_user_status($conn, $user_id, 1);
+
     $stmt = $conn->prepare("
         SELECT id
         FROM games
@@ -227,6 +238,8 @@ function handle_text_registration_request($gameTitle, $chat_id, $user_id, $conn,
 }
 
 function send_registration_confirmation($game_id, $chat_id, $user_id, $conn, $config, $prefetchedGame = null) {
+    update_user_status($conn, $user_id, 1);
+
     $game = $prefetchedGame ?? fetch_game_by_id($conn, $game_id);
 
     if ($game) {
@@ -260,6 +273,8 @@ function send_registration_confirmation($game_id, $chat_id, $user_id, $conn, $co
 }
 
 function handle_enter_team_button($data, $chat_id, $user_id, $conn, $config, $callback) {
+    update_user_status($conn, $user_id, 1);
+
     // Получаем game_id из callback_data: enter_team_{id}
     $game_id = (int) str_replace('enter_team_', '', $data);
 
@@ -341,22 +356,18 @@ function handle_free_text($text, $chat_id, $user_id, $conn, $config) {
 
     if (!$registration) {
         // Fallback — если незавершённых регистраций нет
-        $stmtStatusCheck = $conn->prepare('SELECT status FROM users WHERE id = :id');
-        $stmtStatusCheck->execute([':id' => $user_id]);
-        $currentStatus = $stmtStatusCheck->fetchColumn();
+        $currentStatus = fetch_user_status($conn, $user_id);
 
         if ((int) $currentStatus === 2) {
             return null;
         }
 
-        $stmtStatus = $conn->prepare('UPDATE users SET status = :status WHERE id = :id');
-        $stmtStatus->execute([
-            ':status' => 2,
-            ':id' => $user_id
-        ]);
+        update_user_status($conn, $user_id, 2);
 
         return "Спасибо за сообщение! Напишите /игры, чтобы посмотреть ближайшие события.";
     }
+
+    update_user_status($conn, $user_id, 1);
 
     $registrationHasTeam = isset($registration['team']) && trim($registration['team']) !== '';
 
@@ -520,6 +531,39 @@ function send_user_request_echo($config, $chat_id, $text)
     telegram_request($config, 'sendMessage', [
         'chat_id' => $chat_id,
         'text'    => $text
+    ]);
+}
+
+# --------------------- СТАТУС ПОЛЬЗОВАТЕЛЯ ----------------------
+
+function fetch_user_status($conn, $user_id)
+{
+    if (!$user_id) {
+        return null;
+    }
+
+    $stmt = $conn->prepare('SELECT status FROM users WHERE id = :id');
+    $stmt->execute([':id' => $user_id]);
+
+    return $stmt->fetchColumn();
+}
+
+function update_user_status($conn, $user_id, $status)
+{
+    if (!$user_id) {
+        return;
+    }
+
+    $currentStatus = fetch_user_status($conn, $user_id);
+
+    if ((int) $currentStatus === (int) $status) {
+        return;
+    }
+
+    $stmt = $conn->prepare('UPDATE users SET status = :status WHERE id = :id');
+    $stmt->execute([
+        ':status' => $status,
+        ':id' => $user_id
     ]);
 }
 
