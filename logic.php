@@ -341,6 +341,12 @@ function handle_free_text($text, $chat_id, $user_id, $conn, $config) {
 
     if (!$registration) {
         // Fallback — если незавершённых регистраций нет
+        $stmtStatus = $conn->prepare('UPDATE users SET status = :status WHERE id = :id');
+        $stmtStatus->execute([
+            ':status' => 2,
+            ':id' => $user_id
+        ]);
+
         return "Спасибо за сообщение! Напишите /игры, чтобы посмотреть ближайшие события.";
     }
 

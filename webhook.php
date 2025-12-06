@@ -14,8 +14,8 @@ function sync_user(PDO $conn, array $tg_user): ?int
     }
 
     $stmt = $conn->prepare("
-        INSERT INTO users (telegram_id, first_name, last_name, username, language_code)
-        VALUES (:id, :first, :last, :user, :lang)
+        INSERT INTO users (telegram_id, first_name, last_name, username, language_code, status)
+        VALUES (:id, :first, :last, :user, :lang, :status)
         ON DUPLICATE KEY UPDATE
             first_name = VALUES(first_name),
             last_name = VALUES(last_name),
@@ -29,6 +29,7 @@ function sync_user(PDO $conn, array $tg_user): ?int
         ':last' => $tg_user['last_name'] ?? null,
         ':user' => $tg_user['username'] ?? null,
         ':lang' => $tg_user['language_code'] ?? null,
+        ':status' => 1,
     ]);
 
     $stmt = $conn->prepare('SELECT id FROM users WHERE telegram_id = :tgid');
