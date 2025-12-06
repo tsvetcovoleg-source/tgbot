@@ -68,6 +68,10 @@ function handle_callback($data, $user_id, $chat_id, $config, $conn, $callback) {
         return handle_games_command($chat_id, $user_id, $conn, $config);
     }
 
+    if ($data === 'show_game_formats') {
+        return handle_game_formats_info($chat_id, $user_id, $conn, $config);
+    }
+
     // было: if (str_starts_with($data, 'register_')) {
     if (strpos($data, 'register_') === 0) {
         return handle_register_button($data, $chat_id, $user_id, $conn, $config, $callback, null);
@@ -85,12 +89,15 @@ function handle_callback($data, $user_id, $chat_id, $config, $conn, $callback) {
 # --------------------- ОБРАБОТЧИКИ КОМАНД ----------------------
 
 function handle_start_command($chat_id, $user_id, $conn, $config) {
-    $message = "Добро пожаловать в MindGames Bot! Здесь вы можете записаться на квиз или квест.";
+    $message = "Добро пожаловать в MindGames Bot!\n\nЗдесь вы можете записаться на квиз или квест.";
 
     $keyboard = [
         'inline_keyboard' => [
             [
                 ['text' => '📋 Посмотреть список игр', 'callback_data' => 'show_games']
+            ],
+            [
+                ['text' => 'ℹ️ Узнать про формат игр', 'callback_data' => 'show_game_formats']
             ]
         ]
     ];
@@ -140,6 +147,14 @@ function handle_games_command($chat_id, $user_id, $conn, $config) {
 
     send_telegram($config, $chat_id, $text, null, 'HTML');
     log_bot_message($user_id, strip_tags($text), $conn);
+
+    return null;
+}
+
+function handle_game_formats_info($chat_id, $user_id, $conn, $config) {
+    $message = 'Здесь я расскажу тебе про форматы игр';
+
+    send_reply($config, $chat_id, $message, null, $user_id, $conn);
 
     return null;
 }
