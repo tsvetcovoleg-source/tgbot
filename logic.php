@@ -160,7 +160,11 @@ function handle_games_command($chat_id, $user_id, $conn, $config) {
 }
 
 function handle_game_formats_info($chat_id, $user_id, $conn, $config) {
-    $botUsername = ltrim($config['bot_username'], '@');
+    $botUsername = get_bot_username($config);
+    if ($botUsername === null) {
+        send_reply($config, $chat_id, 'Не удалось сформировать ссылку. Попробуйте позже или отправьте команду /игры.', null, $user_id, $conn);
+        return null;
+    }
     $quizLink = sprintf('https://t.me/%s?start=quiz', rawurlencode($botUsername));
     $detectiveLink = sprintf('https://t.me/%s?start=detective', rawurlencode($botUsername));
     $questLink = sprintf('https://t.me/%s?start=quest', rawurlencode($botUsername));
@@ -453,6 +457,8 @@ function build_games_message(array $games, array $config)
 {
     $messages = [];
 
+    $botUsername = get_bot_username($config);
+
     foreach ($games as $game) {
         $gameNumberEscaped = htmlspecialchars($game['game_number'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
         $gameDateEscaped = htmlspecialchars($game['game_date'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
@@ -460,18 +466,28 @@ function build_games_message(array $games, array $config)
         $locationEscaped = htmlspecialchars($game['location'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
         $priceEscaped = htmlspecialchars($game['price'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
 
-        $botUsername = ltrim($config['bot_username'], '@');
-        $shareLink = sprintf(
-            'https://t.me/%s?start=register_%d',
-            rawurlencode($botUsername),
-            (int) $game['id']
-        );
+        $shareLink = null;
 
-        $messages[] = "🎮 <b>{$gameNumberEscaped}</b>\n" .
+        if ($botUsername !== null) {
+            $shareLink = sprintf(
+                'https://t.me/%s?start=register_%d',
+                rawurlencode($botUsername),
+                (int) $game['id']
+            );
+        }
+
+        $messageText = "🎮 <b>{$gameNumberEscaped}</b>\n" .
             "📅 {$gameDateEscaped} в {$startTimeEscaped}\n" .
             "📍 {$locationEscaped}\n" .
-            "💰 {$priceEscaped}\n\n" .
-            '<a href="' . htmlspecialchars($shareLink, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '">📥 Зарегистрироваться на игру</a>';
+            "💰 {$priceEscaped}\n\n";
+
+        if ($shareLink !== null) {
+            $messageText .= '<a href="' . htmlspecialchars($shareLink, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '">📥 Зарегистрироваться на игру</a>';
+        } else {
+            $messageText .= "Отправьте /start, чтобы открыть бота и зарегистрироваться.";
+        }
+
+        $messages[] = $messageText;
     }
 
     return implode("\n\n", $messages);
