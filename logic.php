@@ -52,8 +52,6 @@ function handle_start_with_payload($chat_id, $user_id, $conn, $config, $payload,
                     delete_message_silently($config, $chat_id, $telegramMessageId);
                 }
 
-                send_user_request_echo($config, $chat_id, $userRequestText);
-
                 return handle_register_button('register_' . $game_id, $chat_id, $user_id, $conn, $config, null, $game);
             }
 
@@ -180,7 +178,8 @@ function send_registration_confirmation($game_id, $chat_id, $user_id, $conn, $co
         $msg = "✅ Вы зарегистрированы на игру:\n\n" .
                "🎮 <b>" . htmlspecialchars($game['game_number'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . "</b>\n" .
                "📅 " . htmlspecialchars($game['game_date'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . " в " . htmlspecialchars($game['start_time'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . "\n" .
-               "📍 " . htmlspecialchars($game['location'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+               "📍 " . htmlspecialchars($game['location'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . "\n\n" .
+               "Чтобы завершить регистрацию, введите название своей команды.";
 
         // Инлайн-кнопка "Ввести название команды"
         $keyboard = [
