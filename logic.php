@@ -36,6 +36,14 @@ function handle_message($text, $user_id, $chat_id, $config, $conn, $callback = n
 
 function handle_start_with_payload($chat_id, $user_id, $conn, $config, $payload, $telegramMessageId = null, $storedMessageId = null)
 {
+    if ($payload === 'quiz') {
+        if ($telegramMessageId) {
+            delete_message_silently($config, $chat_id, $telegramMessageId);
+        }
+
+        return handle_quiz_games_command($chat_id, $user_id, $conn, $config);
+    }
+
     if (strpos($payload, 'register_') === 0) {
         $game_id = (int) mb_substr($payload, mb_strlen('register_'));
         if ($game_id > 0) {
@@ -127,17 +135,13 @@ function handle_games_command($chat_id, $user_id, $conn, $config) {
 }
 
 function handle_game_formats_info($chat_id, $user_id, $conn, $config) {
-    $message = "Квиз – это очень крутая игра";
+    $botUsername = ltrim($config['bot_username'], '@');
+    $quizLink = sprintf('https://t.me/%s?start=quiz', rawurlencode($botUsername));
 
-    $keyboard = [
-        'inline_keyboard' => [
-            [
-                ['text' => 'Узнать, когда ближайшие игры квиза', 'callback_data' => 'show_quiz_games']
-            ]
-        ]
-    ];
+    $message = "Квиз – это очень крутая игра\n\n" .
+        '<a href="' . htmlspecialchars($quizLink, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '">Узнать, когда ближайшие игры квиза</a>';
 
-    send_reply($config, $chat_id, $message, $keyboard, $user_id, $conn);
+    send_reply($config, $chat_id, $message, null, $user_id, $conn);
 
     return null;
 }
