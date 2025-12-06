@@ -75,7 +75,39 @@ if ($action === 'send_message') {
         ':msg' => $messageText,
     ]);
 
-    echo json_encode(['success' => true]);
+    echo json_encode([
+        'success' => true,
+        'message' => [
+            'id' => (int) $conn->lastInsertId(),
+            'message' => $messageText,
+            'from_bot' => true,
+        ],
+    ]);
+    exit;
+}
+
+if ($action === 'get_user_messages') {
+    $userId = (int) ($_POST['user_id'] ?? 0);
+
+    if ($userId <= 0) {
+        http_response_code(400);
+        echo json_encode(['error' => 'Некорректный пользователь']);
+        exit;
+    }
+
+    $stmt = $conn->prepare('SELECT id, message, from_bot FROM messages WHERE user_id = :uid ORDER BY id ASC');
+    $stmt->execute([':uid' => $userId]);
+
+    echo json_encode([
+        'success' => true,
+        'messages' => array_map(static function ($row) {
+            return [
+                'id' => (int) $row['id'],
+                'message' => $row['message'],
+                'from_bot' => (bool) $row['from_bot'],
+            ];
+        }, $stmt->fetchAll(PDO::FETCH_ASSOC)),
+    ]);
     exit;
 }
 
