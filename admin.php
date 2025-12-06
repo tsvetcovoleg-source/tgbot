@@ -43,7 +43,7 @@ if (admin_logged_in()) {
         .tab-panel { display: none; }
         .tab-panel.active { display: block; }
         .games-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
-        .game { border: 1px solid var(--border); padding: 12px; border-radius: 10px; background: #fafafa; }
+        .game { border: 1px solid var(--border); padding: 12px; border-radius: 10px; background: #fafafa; display: flex; flex-direction: column; gap: 6px; }
         .badge { display: inline-block; padding: 4px 8px; border-radius: 6px; background: #eef2ff; color: #3730a3; font-size: 12px; margin-bottom: 6px; }
         .user-layout { display: grid; gap: 14px; grid-template-columns: 280px 1fr; align-items: start; }
         .user-list { max-height: 620px; overflow-y: auto; border: 1px solid var(--border); border-radius: 12px; padding: 8px; }
@@ -55,6 +55,14 @@ if (admin_logged_in()) {
         .bubble.bot { background: #ecfdf3; margin-left: auto; }
         .dialogue-empty { color: #666; text-align: center; padding: 20px; }
         .logout-card { max-width: 320px; }
+        .game-actions { margin-top: 4px; display: flex; gap: 8px; flex-wrap: wrap; }
+        .outline-btn { background: transparent; color: var(--blue); border: 1px solid var(--blue); }
+        .outline-btn:hover { background: #f0f6ff; }
+        .game-detail { display: grid; grid-template-columns: minmax(280px, 360px) 1fr; gap: 20px; align-items: start; }
+        .registrations { border: 1px solid var(--border); border-radius: 10px; padding: 10px; background: #fafafa; max-height: 420px; overflow-y: auto; }
+        .registration { border-bottom: 1px solid var(--border); padding: 8px 0; }
+        .registration:last-child { border-bottom: none; }
+        .muted-small { color: #666; font-size: 13px; }
     </style>
 </head>
 <body>
@@ -87,19 +95,64 @@ if (admin_logged_in()) {
                 <h2>Список игр</h2>
                 <div class="games-grid" id="games-grid">
                     <?php foreach ($games as $game): ?>
-                        <div class="game">
+                        <div class="game" data-game-id="<?php echo (int) $game['id']; ?>">
                             <div class="badge"><?php echo htmlspecialchars($game['type'] ?: 'unknown'); ?></div>
-                            <div><strong><?php echo htmlspecialchars($game['game_number']); ?></strong></div>
-                            <div class="muted"><?php echo htmlspecialchars($game['game_date']); ?> в <?php echo htmlspecialchars($game['start_time']); ?></div>
-                            <div><?php echo htmlspecialchars($game['location']); ?></div>
-                            <div class="muted">Стоимость: <?php echo htmlspecialchars($game['price']); ?></div>
+                            <div class="game-title"><strong><?php echo htmlspecialchars($game['game_number']); ?></strong></div>
+                            <div class="muted game-date"><?php echo htmlspecialchars($game['game_date']); ?> в <?php echo htmlspecialchars($game['start_time']); ?></div>
+                            <div class="game-location"><?php echo htmlspecialchars($game['location']); ?></div>
+                            <div class="muted game-price">Стоимость: <?php echo htmlspecialchars($game['price']); ?></div>
                             <div class="muted">ID: <?php echo (int) $game['id']; ?></div>
+                            <div class="game-actions">
+                                <button type="button" class="outline-btn view-game" data-game-id="<?php echo (int) $game['id']; ?>">Открыть</button>
+                            </div>
                         </div>
                     <?php endforeach; ?>
                 </div>
                 <?php if (!$games): ?>
                     <p class="muted" id="games-empty">Пока нет созданных игр.</p>
                 <?php endif; ?>
+            </div>
+
+            <div class="card" id="game-detail-card" style="display: none;">
+                <h2 id="game-detail-title">Детали игры</h2>
+                <div class="game-detail">
+                    <form id="game-edit-form">
+                        <input type="hidden" id="edit_game_id" name="game_id">
+                        <label for="edit_game_number">Название/номер игры</label>
+                        <input type="text" id="edit_game_number" name="game_number" required>
+
+                        <label for="edit_game_date">Дата (YYYY-MM-DD)</label>
+                        <input type="date" id="edit_game_date" name="game_date" required>
+
+                        <label for="edit_start_time">Время начала (HH:MM)</label>
+                        <input type="time" id="edit_start_time" name="start_time" required>
+
+                        <label for="edit_location">Локация</label>
+                        <input type="text" id="edit_location" name="location" required>
+
+                        <label for="edit_price">Стоимость</label>
+                        <input type="text" id="edit_price" name="price" required>
+
+                        <label for="edit_type">Тип игры</label>
+                        <select id="edit_type" name="type" required>
+                            <option value="">-- выберите --</option>
+                            <option value="quiz">quiz</option>
+                            <option value="lightquiz">lightquiz</option>
+                            <option value="detective">detective</option>
+                            <option value="quest">quest</option>
+                        </select>
+
+                        <button type="submit">Сохранить изменения</button>
+                        <p id="game-edit-status"></p>
+                    </form>
+
+                    <div>
+                        <h3>Регистрации</h3>
+                        <div id="registrations-list" class="registrations">
+                            <p class="muted" id="registrations-empty">Нет регистраций на эту игру</p>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <div class="card">
@@ -277,16 +330,163 @@ function addGameCard(id, game) {
 
     const card = document.createElement('div');
     card.className = 'game';
+    card.dataset.gameId = String(id);
     card.innerHTML = `
         <div class="badge">${escapeHtml(game.type || 'unknown')}</div>
-        <div><strong>${escapeHtml(game.number)}</strong></div>
-        <div class="muted">${escapeHtml(game.date)} в ${escapeHtml(game.time)}</div>
-        <div>${escapeHtml(game.location)}</div>
-        <div class="muted">Стоимость: ${escapeHtml(game.price)}</div>
+        <div class="game-title"><strong>${escapeHtml(game.number)}</strong></div>
+        <div class="muted game-date">${escapeHtml(game.date)} в ${escapeHtml(game.time)}</div>
+        <div class="game-location">${escapeHtml(game.location)}</div>
+        <div class="muted game-price">Стоимость: ${escapeHtml(game.price)}</div>
         <div class="muted">ID: ${id}</div>
+        <div class="game-actions">
+            <button type="button" class="outline-btn view-game" data-game-id="${id}">Открыть</button>
+        </div>
     `;
 
     grid.prepend(card);
+}
+
+let activeGameId = null;
+let currentRegistrations = [];
+
+function renderRegistrations(registrations) {
+    const container = document.getElementById('registrations-list');
+    if (!container) return;
+
+    if (!registrations || registrations.length === 0) {
+        container.innerHTML = '<p class="muted" id="registrations-empty">Нет регистраций на эту игру</p>';
+        return;
+    }
+
+    container.innerHTML = registrations.map((reg) => {
+        const quantityLabel = reg.quantity ? ` · ${reg.quantity} чел.` : '';
+        const teamLabel = reg.team ? `<strong>${escapeHtml(reg.team)}</strong>${quantityLabel}` : 'Без названия';
+        return `
+            <div class="registration">
+                <div>${teamLabel}</div>
+                <div class="muted-small">${escapeHtml(reg.user_label || '')} · ${escapeHtml(reg.telegram_id || '')}</div>
+                <div class="muted-small">${escapeHtml(reg.created_at || '')}</div>
+            </div>
+        `;
+    }).join('');
+}
+
+function showGameDetails(game, registrations) {
+    const card = document.getElementById('game-detail-card');
+    if (!card) return;
+
+    activeGameId = game.id;
+    card.style.display = 'block';
+
+    const title = document.getElementById('game-detail-title');
+    if (title) {
+        title.textContent = `Детали игры: ${game.game_number}`;
+    }
+
+    document.getElementById('edit_game_id').value = game.id;
+    document.getElementById('edit_game_number').value = game.game_number;
+    document.getElementById('edit_game_date').value = game.game_date;
+    document.getElementById('edit_start_time').value = game.start_time;
+    document.getElementById('edit_location').value = game.location;
+    document.getElementById('edit_price').value = game.price;
+    document.getElementById('edit_type').value = game.type || '';
+
+    const status = document.getElementById('game-edit-status');
+    if (status) {
+        status.textContent = '';
+        status.className = '';
+    }
+
+    currentRegistrations = registrations || [];
+    renderRegistrations(currentRegistrations);
+}
+
+function loadGameDetails(gameId) {
+    const formData = new FormData();
+    formData.append('action', 'get_game_details');
+    formData.append('game_id', gameId);
+
+    fetch('admin_actions.php', {
+        method: 'POST',
+        body: formData
+    }).then(async (res) => {
+        const data = await res.json();
+        if (res.ok && data.success) {
+            showGameDetails(data.game, data.registrations || []);
+        } else {
+            alert(data.error || 'Не удалось загрузить данные игры');
+        }
+    }).catch(() => {
+        alert('Ошибка сети при загрузке игры');
+    });
+}
+
+function updateGameCard(game) {
+    const grid = document.getElementById('games-grid');
+    if (!grid) return;
+    const card = grid.querySelector(`.game[data-game-id="${game.id}"]`);
+    if (!card) return;
+
+    const title = card.querySelector('.game-title');
+    if (title) title.innerHTML = `<strong>${escapeHtml(game.game_number)}</strong>`;
+
+    const date = card.querySelector('.game-date');
+    if (date) date.textContent = `${game.game_date} в ${game.start_time}`;
+
+    const location = card.querySelector('.game-location');
+    if (location) location.textContent = game.location;
+
+    const price = card.querySelector('.game-price');
+    if (price) price.textContent = `Стоимость: ${game.price}`;
+
+    const badge = card.querySelector('.badge');
+    if (badge) badge.textContent = game.type || 'unknown';
+}
+
+const gamesGrid = document.getElementById('games-grid');
+if (gamesGrid) {
+    gamesGrid.addEventListener('click', (event) => {
+        const btn = event.target.closest('.view-game');
+        if (btn && btn.dataset.gameId) {
+            loadGameDetails(btn.dataset.gameId);
+        }
+    });
+}
+
+const gameEditForm = document.getElementById('game-edit-form');
+if (gameEditForm) {
+    gameEditForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const status = document.getElementById('game-edit-status');
+        if (!activeGameId) {
+            status.textContent = 'Выберите игру, чтобы сохранить изменения';
+            status.className = 'error';
+            return;
+        }
+
+        const formData = new FormData(gameEditForm);
+        formData.append('action', 'update_game');
+        formData.append('game_id', activeGameId);
+
+        fetch('admin_actions.php', {
+            method: 'POST',
+            body: formData
+        }).then(async (res) => {
+            const data = await res.json();
+            if (res.ok && data.success) {
+                status.textContent = 'Изменения сохранены';
+                status.className = 'success';
+                showGameDetails(data.game, currentRegistrations);
+                updateGameCard(data.game);
+            } else {
+                status.textContent = data.error || 'Не удалось сохранить игру';
+                status.className = 'error';
+            }
+        }).catch(() => {
+            status.textContent = 'Ошибка сети при сохранении';
+            status.className = 'error';
+        });
+    });
 }
 
 const userList = document.getElementById('user-list');
