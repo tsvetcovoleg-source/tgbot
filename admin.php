@@ -47,7 +47,7 @@ if (admin_logged_in()) {
         .badge { display: inline-block; padding: 4px 8px; border-radius: 6px; background: #eef2ff; color: #3730a3; font-size: 12px; margin-bottom: 6px; }
         .user-layout { display: grid; gap: 14px; grid-template-columns: 280px 1fr; align-items: start; }
         .user-list { max-height: 620px; overflow-y: auto; border: 1px solid var(--border); border-radius: 12px; padding: 8px; }
-        .user-btn { width: 100%; text-align: left; padding: 10px; border: 1px solid transparent; border-radius: 10px; background: transparent; cursor: pointer; margin-bottom: 6px; }
+        .user-btn { width: 100%; text-align: left; padding: 10px; border: 1px solid transparent; border-radius: 10px; background: transparent; cursor: pointer; margin-bottom: 6px; color: #111; }
         .user-btn:hover, .user-btn.active { border-color: var(--blue); background: #f0f6ff; }
         .dialogue { border: 1px solid var(--border); border-radius: 12px; padding: 12px; background: #fff; min-height: 200px; max-height: 480px; overflow-y: auto; }
         .bubble { padding: 10px 12px; border-radius: 12px; margin-bottom: 10px; max-width: 80%; white-space: pre-wrap; }
