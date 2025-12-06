@@ -225,8 +225,8 @@ function handle_enter_team_button($data, $chat_id, $user_id, $conn, $config, $ca
     if ($registration) {
         $reg_id = (int) $registration['id'];
 
-        // Сбрасываем предыдущее название команды, чтобы пользователь мог ввести новое
-        $stmtReset = $conn->prepare("UPDATE registrations SET team = NULL WHERE id = :rid");
+        // Сбрасываем предыдущее название команды и количество, чтобы пользователь мог ввести новое
+        $stmtReset = $conn->prepare("UPDATE registrations SET team = NULL, quantity = NULL WHERE id = :rid");
         $stmtReset->execute([':rid' => $reg_id]);
     } else {
         // Создаём новую регистрацию: только user_id, game_id, created_at
@@ -272,34 +272,62 @@ function handle_free_text($text, $chat_id, $user_id, $conn, $config) {
         return 'Название команды не может быть пустым. Пожалуйста, отправьте текстовое название.';
     }
 
-    // Ищем самую свежую регистрацию без названия команды
+    // Ищем самую свежую регистрацию без названия команды или количества
     $stmt = $conn->prepare("
-        SELECT id
+        SELECT id, team, quantity
         FROM registrations
-        WHERE user_id = :uid AND (team IS NULL OR team = '')
+        WHERE user_id = :uid AND (team IS NULL OR team = '' OR quantity IS NULL)
         ORDER BY id DESC
         LIMIT 1
     ");
     $stmt->execute([':uid' => $user_id]);
-    $reg_id = $stmt->fetchColumn();
+    $registration = $stmt->fetch(PDO::FETCH_ASSOC);
 
-    if ($reg_id) {
-        // Обновляем team тем, что прислал пользователь
+    if (!$registration) {
+        // Fallback — если незавершённых регистраций нет
+        return "Спасибо за сообщение! Напишите /игры, чтобы посмотреть ближайшие события.";
+    }
+
+    $registrationHasTeam = isset($registration['team']) && trim($registration['team']) !== '';
+
+    if (!$registrationHasTeam) {
+        // Обновляем team тем, что прислал пользователь, и просим указать количество игроков
         $stmtUp = $conn->prepare("UPDATE registrations SET team = :team WHERE id = :rid");
         $stmtUp->execute([
             ':team' => $teamName,
-            ':rid'  => $reg_id
+            ':rid'  => $registration['id']
         ]);
 
-        $confirm = "✅ Команда «".htmlspecialchars($teamName, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8')."» сохранена.";
-        send_telegram($config, $chat_id, $confirm, null, 'HTML');
-
-        log_bot_message($user_id, strip_tags($confirm), $conn);
+        $askQuantity = "Введите количество игроков в команде";
+        send_telegram($config, $chat_id, $askQuantity, null, 'HTML');
+        log_bot_message($user_id, strip_tags($askQuantity), $conn);
         return null;
     }
 
-    // Fallback — если незавершённых регистраций нет
-    return "Спасибо за сообщение! Напишите /игры, чтобы посмотреть ближайшие события.";
+    // Если команда уже указана, ожидаем количество игроков
+    $quantity = filter_var($teamName, FILTER_VALIDATE_INT, [
+        'options' => ['min_range' => 1]
+    ]);
+
+    if ($quantity === false) {
+        $askQuantityAgain = "Пожалуйста, укажите количество игроков числом (например, 4).";
+        send_telegram($config, $chat_id, $askQuantityAgain, null, 'HTML');
+        log_bot_message($user_id, strip_tags($askQuantityAgain), $conn);
+        return null;
+    }
+
+    $stmtUp = $conn->prepare("UPDATE registrations SET quantity = :qty WHERE id = :rid");
+    $stmtUp->execute([
+        ':qty' => $quantity,
+        ':rid' => $registration['id']
+    ]);
+
+    $teamEscaped = htmlspecialchars($registration['team'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+    $confirm = "✅ Команда «".$teamEscaped."» сохранена.";
+    send_telegram($config, $chat_id, $confirm, null, 'HTML');
+
+    log_bot_message($user_id, strip_tags($confirm), $conn);
+    return null;
 }
 
 
