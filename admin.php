@@ -4,6 +4,8 @@ require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/admin_auth.php';
 
 $config = require __DIR__ . '/config.php';
+$googleClientId = $config['google_client_id'] ?? '';
+$googleClientMissing = $googleClientId === '';
 $conn = get_connection($config);
 $users = [];
 
@@ -36,15 +38,19 @@ if (admin_logged_in()) {
     <?php if (!admin_logged_in()): ?>
         <div class="card">
             <p>Войдите через Google, чтобы управлять играми и отправлять сообщения.</p>
-            <div id="g_id_onload"
-                 data-client_id="<?php echo htmlspecialchars($config['google_client_id'] ?? '', ENT_QUOTES); ?>"
-                 data-context="signin"
-                 data-ux_mode="popup"
-                 data-callback="handleCredentialResponse"
-                 data-auto_select="false">
-            </div>
-            <div class="g_id_signin" data-type="standard" data-shape="rectangular" data-theme="outline" data-text="signin_with" data-size="large" data-logo_alignment="left"></div>
-            <p id="login-status" class="error"></p>
+            <?php if ($googleClientMissing): ?>
+                <p class="error">Укажите Google OAuth Client ID в config.php или через переменную окружения GOOGLE_CLIENT_ID.</p>
+            <?php else: ?>
+                <div id="g_id_onload"
+                     data-client_id="<?php echo htmlspecialchars($googleClientId, ENT_QUOTES); ?>"
+                     data-context="signin"
+                     data-ux_mode="popup"
+                     data-callback="handleCredentialResponse"
+                     data-auto_select="false">
+                </div>
+                <div class="g_id_signin" data-type="standard" data-shape="rectangular" data-theme="outline" data-text="signin_with" data-size="large" data-logo_alignment="left"></div>
+                <p id="login-status" class="error"></p>
+            <?php endif; ?>
         </div>
     <?php else: ?>
         <div class="card">
