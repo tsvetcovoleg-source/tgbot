@@ -148,7 +148,7 @@ function handle_game_formats_info($chat_id, $user_id, $conn, $config) {
 
 function handle_quiz_games_command($chat_id, $user_id, $conn, $config)
 {
-    $games = fetch_games($conn, 'quiz');
+    $games = fetch_games($conn, ['quiz', 'lightquiz']);
 
     if (!$games) {
         send_reply($config, $chat_id, "Пока нет активных квизов 😢", null, $user_id, $conn);
@@ -362,8 +362,21 @@ function fetch_games($conn, $type = null)
     $params = [];
 
     if ($type !== null) {
-        $query .= " WHERE type = :type";
-        $params[':type'] = $type;
+        if (is_array($type)) {
+            $placeholders = [];
+            foreach ($type as $idx => $value) {
+                $placeholder = ':type' . $idx;
+                $placeholders[] = $placeholder;
+                $params[$placeholder] = $value;
+            }
+
+            if ($placeholders) {
+                $query .= ' WHERE type IN (' . implode(', ', $placeholders) . ')';
+            }
+        } else {
+            $query .= " WHERE type = :type";
+            $params[':type'] = $type;
+        }
     }
 
     $query .= " ORDER BY game_date ASC";
