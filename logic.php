@@ -44,6 +44,22 @@ function handle_start_with_payload($chat_id, $user_id, $conn, $config, $payload,
         return handle_quiz_games_command($chat_id, $user_id, $conn, $config);
     }
 
+    if ($payload === 'detective') {
+        if ($telegramMessageId) {
+            delete_message_silently($config, $chat_id, $telegramMessageId);
+        }
+
+        return handle_detective_games_command($chat_id, $user_id, $conn, $config);
+    }
+
+    if ($payload === 'quest') {
+        if ($telegramMessageId) {
+            delete_message_silently($config, $chat_id, $telegramMessageId);
+        }
+
+        return handle_quest_games_command($chat_id, $user_id, $conn, $config);
+    }
+
     if (strpos($payload, 'register_') === 0) {
         $game_id = (int) mb_substr($payload, mb_strlen('register_'));
         if ($game_id > 0) {
@@ -137,9 +153,15 @@ function handle_games_command($chat_id, $user_id, $conn, $config) {
 function handle_game_formats_info($chat_id, $user_id, $conn, $config) {
     $botUsername = ltrim($config['bot_username'], '@');
     $quizLink = sprintf('https://t.me/%s?start=quiz', rawurlencode($botUsername));
+    $detectiveLink = sprintf('https://t.me/%s?start=detective', rawurlencode($botUsername));
+    $questLink = sprintf('https://t.me/%s?start=quest', rawurlencode($botUsername));
 
     $message = "Квиз – это очень крутая игра\n\n" .
-        '<a href="' . htmlspecialchars($quizLink, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '">Узнать, когда ближайшие игры квиза</a>';
+        '<a href="' . htmlspecialchars($quizLink, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '">Узнать, когда ближайшие игры квиза</a>' .
+        "\n\nДетектив – это очень крутая игра\n\n" .
+        '<a href="' . htmlspecialchars($detectiveLink, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '">Узнать, когда ближайшие игры детектива</a>' .
+        "\n\nКвест – это очень крутая игра\n\n" .
+        '<a href="' . htmlspecialchars($questLink, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '">Узнать, когда ближайшие игры квеста</a>';
 
     send_reply($config, $chat_id, $message, null, $user_id, $conn);
 
@@ -148,25 +170,40 @@ function handle_game_formats_info($chat_id, $user_id, $conn, $config) {
 
 function handle_quiz_games_command($chat_id, $user_id, $conn, $config)
 {
-    $games = fetch_games($conn, ['quiz', 'lightquiz']);
+    return handle_games_by_types($chat_id, $user_id, $conn, $config, ['quiz', 'lightquiz'], '📋 <b>Список ближайших игр квиза:</b>', 'Пока нет активных квизов 😢');
+}
 
-    if (!$games) {
-        send_reply($config, $chat_id, "Пока нет активных квизов 😢", null, $user_id, $conn);
-        return null;
-    }
+function handle_detective_games_command($chat_id, $user_id, $conn, $config)
+{
+    return handle_games_by_types($chat_id, $user_id, $conn, $config, ['detective'], '📋 <b>Список ближайших игр детектива:</b>', 'Пока нет активных детективов 😢');
+}
 
-    $text = "📋 <b>Список ближайших игр квиза:</b>\n\n" . build_games_message($games, $config);
-
-    send_telegram($config, $chat_id, $text, null, 'HTML');
-    log_bot_message($user_id, strip_tags($text), $conn);
-
-    return null;
+function handle_quest_games_command($chat_id, $user_id, $conn, $config)
+{
+    return handle_games_by_types($chat_id, $user_id, $conn, $config, ['quest'], '📋 <b>Список ближайших игр квеста:</b>', 'Пока нет активных квестов 😢');
 }
 
 function handle_register_button($data, $chat_id, $user_id, $conn, $config, $callback, $prefetchedGame = null) {
     $game_id = (int) str_replace('register_', '', $data);
 
     send_registration_confirmation($game_id, $chat_id, $user_id, $conn, $config, $prefetchedGame);
+}
+
+function handle_games_by_types($chat_id, $user_id, $conn, $config, array $types, $title, $emptyMessage)
+{
+    $games = fetch_games($conn, $types);
+
+    if (!$games) {
+        send_reply($config, $chat_id, $emptyMessage, null, $user_id, $conn);
+        return null;
+    }
+
+    $text = $title . "\n\n" . build_games_message($games, $config);
+
+    send_telegram($config, $chat_id, $text, null, 'HTML');
+    log_bot_message($user_id, strip_tags($text), $conn);
+
+    return null;
 }
 
 function handle_text_registration_request($gameTitle, $chat_id, $user_id, $conn, $config) {
