@@ -36,6 +36,30 @@ function handle_message($text, $user_id, $chat_id, $config, $conn, $callback = n
 
 function handle_start_with_payload($chat_id, $user_id, $conn, $config, $payload, $telegramMessageId = null, $storedMessageId = null)
 {
+    if ($payload === 'quiz') {
+        if ($telegramMessageId) {
+            delete_message_silently($config, $chat_id, $telegramMessageId);
+        }
+
+        return handle_quiz_games_command($chat_id, $user_id, $conn, $config);
+    }
+
+    if ($payload === 'detective') {
+        if ($telegramMessageId) {
+            delete_message_silently($config, $chat_id, $telegramMessageId);
+        }
+
+        return handle_detective_games_command($chat_id, $user_id, $conn, $config);
+    }
+
+    if ($payload === 'quest') {
+        if ($telegramMessageId) {
+            delete_message_silently($config, $chat_id, $telegramMessageId);
+        }
+
+        return handle_quest_games_command($chat_id, $user_id, $conn, $config);
+    }
+
     if (strpos($payload, 'register_') === 0) {
         $game_id = (int) mb_substr($payload, mb_strlen('register_'));
         if ($game_id > 0) {
@@ -70,6 +94,10 @@ function handle_callback($data, $user_id, $chat_id, $config, $conn, $callback) {
 
     if ($data === 'show_game_formats') {
         return handle_game_formats_info($chat_id, $user_id, $conn, $config);
+    }
+
+    if ($data === 'show_quiz_games') {
+        return handle_quiz_games_command($chat_id, $user_id, $conn, $config);
     }
 
     // было: if (str_starts_with($data, 'register_')) {
@@ -107,43 +135,14 @@ function handle_start_command($chat_id, $user_id, $conn, $config) {
 }
 
 function handle_games_command($chat_id, $user_id, $conn, $config) {
-    $stmt = $conn->query("
-        SELECT id, game_number, game_date, start_time, location, price
-        FROM games
-        ORDER BY game_date ASC
-    ");
-
-    $games = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    $games = fetch_games($conn);
 
     if (!$games) {
         send_reply($config, $chat_id, "Пока нет активных игр 😢", null, $user_id, $conn);
         return null;
     }
 
-    $messages = [];
-
-    foreach ($games as $game) {
-        $gameNumberEscaped = htmlspecialchars($game['game_number'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
-        $gameDateEscaped = htmlspecialchars($game['game_date'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
-        $startTimeEscaped = htmlspecialchars($game['start_time'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
-        $locationEscaped = htmlspecialchars($game['location'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
-        $priceEscaped = htmlspecialchars($game['price'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
-
-        $botUsername = ltrim($config['bot_username'], '@');
-        $shareLink = sprintf(
-            'https://t.me/%s?start=register_%d',
-            rawurlencode($botUsername),
-            (int) $game['id']
-        );
-
-        $messages[] = "🎮 <b>{$gameNumberEscaped}</b>\n" .
-            "📅 {$gameDateEscaped} в {$startTimeEscaped}\n" .
-            "📍 {$locationEscaped}\n" .
-            "💰 {$priceEscaped}\n\n" .
-            '<a href="' . htmlspecialchars($shareLink, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '">📥 Зарегистрироваться на игру</a>';
-    }
-
-    $text = "📋 <b>Список доступных игр:</b>\n\n" . implode("\n\n", $messages);
+    $text = "📋 <b>Список доступных игр:</b>\n\n" . build_games_message($games, $config);
 
     send_telegram($config, $chat_id, $text, null, 'HTML');
     log_bot_message($user_id, strip_tags($text), $conn);
@@ -152,17 +151,59 @@ function handle_games_command($chat_id, $user_id, $conn, $config) {
 }
 
 function handle_game_formats_info($chat_id, $user_id, $conn, $config) {
-    $message = 'Здесь я расскажу тебе про форматы игр';
+    $botUsername = ltrim($config['bot_username'], '@');
+    $quizLink = sprintf('https://t.me/%s?start=quiz', rawurlencode($botUsername));
+    $detectiveLink = sprintf('https://t.me/%s?start=detective', rawurlencode($botUsername));
+    $questLink = sprintf('https://t.me/%s?start=quest', rawurlencode($botUsername));
+
+    $message = "Квиз – это очень крутая игра\n\n" .
+        '<a href="' . htmlspecialchars($quizLink, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '">Узнать, когда ближайшие игры квиза</a>' .
+        "\n\nДетектив – это очень крутая игра\n\n" .
+        '<a href="' . htmlspecialchars($detectiveLink, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '">Узнать, когда ближайшие игры детектива</a>' .
+        "\n\nКвест – это очень крутая игра\n\n" .
+        '<a href="' . htmlspecialchars($questLink, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '">Узнать, когда ближайшие игры квеста</a>';
 
     send_reply($config, $chat_id, $message, null, $user_id, $conn);
 
     return null;
 }
 
+function handle_quiz_games_command($chat_id, $user_id, $conn, $config)
+{
+    return handle_games_by_types($chat_id, $user_id, $conn, $config, ['quiz', 'lightquiz'], '📋 <b>Список ближайших игр квиза:</b>', 'Пока нет активных квизов 😢');
+}
+
+function handle_detective_games_command($chat_id, $user_id, $conn, $config)
+{
+    return handle_games_by_types($chat_id, $user_id, $conn, $config, ['detective'], '📋 <b>Список ближайших игр детектива:</b>', 'Пока нет активных детективов 😢');
+}
+
+function handle_quest_games_command($chat_id, $user_id, $conn, $config)
+{
+    return handle_games_by_types($chat_id, $user_id, $conn, $config, ['quest'], '📋 <b>Список ближайших игр квеста:</b>', 'Пока нет активных квестов 😢');
+}
+
 function handle_register_button($data, $chat_id, $user_id, $conn, $config, $callback, $prefetchedGame = null) {
     $game_id = (int) str_replace('register_', '', $data);
 
     send_registration_confirmation($game_id, $chat_id, $user_id, $conn, $config, $prefetchedGame);
+}
+
+function handle_games_by_types($chat_id, $user_id, $conn, $config, array $types, $title, $emptyMessage)
+{
+    $games = fetch_games($conn, $types);
+
+    if (!$games) {
+        send_reply($config, $chat_id, $emptyMessage, null, $user_id, $conn);
+        return null;
+    }
+
+    $text = $title . "\n\n" . build_games_message($games, $config);
+
+    send_telegram($config, $chat_id, $text, null, 'HTML');
+    log_bot_message($user_id, strip_tags($text), $conn);
+
+    return null;
 }
 
 function handle_text_registration_request($gameTitle, $chat_id, $user_id, $conn, $config) {
@@ -347,6 +388,69 @@ function handle_free_text($text, $chat_id, $user_id, $conn, $config) {
 
 
 # --------------------- ДОПОЛНИТЕЛЬНЫЕ ХЕЛПЕРЫ ----------------------
+
+function fetch_games($conn, $type = null)
+{
+    $query = "
+        SELECT id, game_number, game_date, start_time, location, price
+        FROM games
+    ";
+
+    $params = [];
+
+    if ($type !== null) {
+        if (is_array($type)) {
+            $placeholders = [];
+            foreach ($type as $idx => $value) {
+                $placeholder = ':type' . $idx;
+                $placeholders[] = $placeholder;
+                $params[$placeholder] = $value;
+            }
+
+            if ($placeholders) {
+                $query .= ' WHERE type IN (' . implode(', ', $placeholders) . ')';
+            }
+        } else {
+            $query .= " WHERE type = :type";
+            $params[':type'] = $type;
+        }
+    }
+
+    $query .= " ORDER BY game_date ASC";
+
+    $stmt = $conn->prepare($query);
+    $stmt->execute($params);
+
+    return $stmt->fetchAll(PDO::FETCH_ASSOC);
+}
+
+function build_games_message(array $games, array $config)
+{
+    $messages = [];
+
+    foreach ($games as $game) {
+        $gameNumberEscaped = htmlspecialchars($game['game_number'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+        $gameDateEscaped = htmlspecialchars($game['game_date'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+        $startTimeEscaped = htmlspecialchars($game['start_time'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+        $locationEscaped = htmlspecialchars($game['location'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+        $priceEscaped = htmlspecialchars($game['price'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+
+        $botUsername = ltrim($config['bot_username'], '@');
+        $shareLink = sprintf(
+            'https://t.me/%s?start=register_%d',
+            rawurlencode($botUsername),
+            (int) $game['id']
+        );
+
+        $messages[] = "🎮 <b>{$gameNumberEscaped}</b>\n" .
+            "📅 {$gameDateEscaped} в {$startTimeEscaped}\n" .
+            "📍 {$locationEscaped}\n" .
+            "💰 {$priceEscaped}\n\n" .
+            '<a href="' . htmlspecialchars($shareLink, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '">📥 Зарегистрироваться на игру</a>';
+    }
+
+    return implode("\n\n", $messages);
+}
 
 function fetch_game_by_id($conn, $game_id)
 {
