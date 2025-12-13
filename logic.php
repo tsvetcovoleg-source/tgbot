@@ -186,17 +186,17 @@ function handle_game_formats_info($chat_id, $user_id, $conn, $config) {
 
 function handle_quiz_games_command($chat_id, $user_id, $conn, $config)
 {
-    return handle_games_by_types($chat_id, $user_id, $conn, $config, ['quiz', 'lightquiz'], '📋 <b>Список ближайших игр квиза:</b>', 'Пока нет активных квизов 😢');
+    return handle_games_by_types($chat_id, $user_id, $conn, $config, ['quiz', 'lightquiz'], 'Список ближайших игр:', 'Пока нет активных квизов 😢');
 }
 
 function handle_detective_games_command($chat_id, $user_id, $conn, $config)
 {
-    return handle_games_by_types($chat_id, $user_id, $conn, $config, ['detective'], '📋 <b>Список ближайших игр детектива:</b>', 'Пока нет активных детективов 😢');
+    return handle_games_by_types($chat_id, $user_id, $conn, $config, ['detective'], 'Список ближайших игр:', 'Пока нет активных детективов 😢');
 }
 
 function handle_quest_games_command($chat_id, $user_id, $conn, $config)
 {
-    return handle_games_by_types($chat_id, $user_id, $conn, $config, ['quest'], '📋 <b>Список ближайших игр квеста:</b>', 'Пока нет активных квестов 😢');
+    return handle_games_by_types($chat_id, $user_id, $conn, $config, ['quest'], 'Список ближайших игр:', 'Пока нет активных квестов 😢');
 }
 
 function handle_register_button($data, $chat_id, $user_id, $conn, $config, $callback, $prefetchedGame = null) {
@@ -464,10 +464,15 @@ function build_games_message(array $games, array $config)
 
     foreach ($games as $game) {
         $gameNumberEscaped = htmlspecialchars($game['game_number'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
-        $gameDateEscaped = htmlspecialchars($game['game_date'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
-        $startTimeEscaped = htmlspecialchars($game['start_time'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
         $locationEscaped = htmlspecialchars($game['location'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
         $priceEscaped = htmlspecialchars($game['price'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+
+        $formattedDateTime = format_game_datetime($game['game_date'], $game['start_time']);
+        $formattedDateTimeEscaped = htmlspecialchars(
+            $formattedDateTime ?? trim($game['game_date'] . ' ' . $game['start_time']),
+            ENT_QUOTES | ENT_SUBSTITUTE,
+            'UTF-8'
+        );
 
         $shareLink = null;
 
@@ -479,13 +484,13 @@ function build_games_message(array $games, array $config)
             );
         }
 
-        $messageText = "🎮 <b>{$gameNumberEscaped}</b>\n" .
-            "📅 {$gameDateEscaped} в {$startTimeEscaped}\n" .
+        $messageText = "🎮 {$gameNumberEscaped}\n" .
+            "📅 {$formattedDateTimeEscaped}\n" .
             "📍 {$locationEscaped}\n" .
             "💰 {$priceEscaped}\n\n";
 
         if ($shareLink !== null) {
-            $messageText .= '<a href="' . htmlspecialchars($shareLink, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '">📥 Зарегистрироваться на игру</a>';
+            $messageText .= '<a href="' . htmlspecialchars($shareLink, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '">✉️ Зарегистрироваться на игру</a>';
         } else {
             $messageText .= "Отправьте /start, чтобы открыть бота и зарегистрироваться.";
         }
@@ -494,6 +499,52 @@ function build_games_message(array $games, array $config)
     }
 
     return implode("\n\n", $messages);
+}
+
+function format_game_datetime(string $date, string $time)
+{
+    $dateTime = DateTime::createFromFormat('Y-m-d H:i:s', trim($date . ' ' . $time));
+
+    if (!$dateTime) {
+        $dateTime = DateTime::createFromFormat('Y-m-d H:i', trim($date . ' ' . $time));
+    }
+
+    if (!$dateTime) {
+        $dateTime = DateTime::createFromFormat('Y-m-d', trim($date));
+    }
+
+    if (!$dateTime) {
+        return null;
+    }
+
+    $months = [
+        1 => 'января',
+        2 => 'февраля',
+        3 => 'марта',
+        4 => 'апреля',
+        5 => 'мая',
+        6 => 'июня',
+        7 => 'июля',
+        8 => 'августа',
+        9 => 'сентября',
+        10 => 'октября',
+        11 => 'ноября',
+        12 => 'декабря',
+    ];
+
+    $monthNumber = (int) $dateTime->format('n');
+    $monthName = $months[$monthNumber] ?? $dateTime->format('m');
+
+    $formattedDate = sprintf(
+        '%s %s %s',
+        $dateTime->format('d'),
+        $monthName,
+        $dateTime->format('Y')
+    );
+
+    $formattedTime = $dateTime->format('H:i');
+
+    return sprintf('%s, %s', $formattedDate, $formattedTime);
 }
 
 function fetch_game_by_id($conn, $game_id)
