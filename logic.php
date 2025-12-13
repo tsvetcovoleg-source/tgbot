@@ -363,7 +363,7 @@ function handle_free_text($text, $chat_id, $user_id, $conn, $config) {
 
     // Ищем самую свежую регистрацию без названия команды или количества
     $stmt = $conn->prepare("
-        SELECT id, team, quantity
+        SELECT id, team, quantity, game_id
         FROM registrations
         WHERE user_id = :uid AND (team IS NULL OR team = '' OR quantity IS NULL)
         ORDER BY id DESC
@@ -436,7 +436,7 @@ function handle_quantity_selection($data, $chat_id, $user_id, $conn, $config, $c
     }
 
     $stmt = $conn->prepare("
-        SELECT id, team
+        SELECT id, team, game_id
         FROM registrations
         WHERE user_id = :uid
           AND team IS NOT NULL AND team != ''
@@ -517,8 +517,51 @@ function save_quantity_and_confirm($conn, $config, $chat_id, $user_id, $registra
 
     $teamEscaped = htmlspecialchars($registration['team'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
     $quantityEscaped = htmlspecialchars($quantity, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
-    $confirm = "✅ Команда «" . $teamEscaped . "» сохранена.\nРазмер команды: " . $quantityEscaped . ".";
-    send_telegram($config, $chat_id, $confirm, null, 'HTML');
+
+    $confirm = null;
+
+    if (!empty($registration['game_id'])) {
+        $game = fetch_game_by_id($conn, $registration['game_id']);
+
+        if ($game) {
+            $gameNumberEscaped = htmlspecialchars($game['game_number'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+            $locationEscaped = htmlspecialchars($game['location'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+
+            $formattedDateTime = format_game_datetime($game['game_date'], $game['start_time']);
+            $formattedDateTimeEscaped = htmlspecialchars(
+                $formattedDateTime ?? trim($game['game_date'] . ' ' . $game['start_time']),
+                ENT_QUOTES | ENT_SUBSTITUTE,
+                'UTF-8'
+            );
+
+            $confirm = "🎉 Вы успешно зарегистрированы!\n\n" .
+                "Вот данные вашей регистрации:\n\n" .
+                "🎮 {$gameNumberEscaped}\n" .
+                "📅 {$formattedDateTimeEscaped}\n" .
+                "📍 {$locationEscaped}\n" .
+                "👥 Команда: «{$teamEscaped}» (Количество игроков: {$quantityEscaped})\n\n" .
+                "Мы вас ждём! Если что-то нужно изменить — просто напишите в чат.\n\n" .
+                "А пока — вот ваши основные кнопки, вдруг пригодятся 👇";
+        }
+    }
+
+    if ($confirm === null) {
+        $confirm = "✅ Команда «" . $teamEscaped . "» сохранена.\nРазмер команды: " . $quantityEscaped . ".\n\n" .
+            "А пока — вот ваши основные кнопки, вдруг пригодятся 👇";
+    }
+
+    $keyboard = [
+        'inline_keyboard' => [
+            [
+                ['text' => '📋 Посмотреть список игр', 'callback_data' => 'show_games']
+            ],
+            [
+                ['text' => 'ℹ️ Узнать про формат игр', 'callback_data' => 'show_game_formats']
+            ]
+        ]
+    ];
+
+    send_telegram($config, $chat_id, $confirm, $keyboard, 'HTML');
 
     log_bot_message($user_id, strip_tags($confirm), $conn);
 }
