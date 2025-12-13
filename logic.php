@@ -250,12 +250,19 @@ function send_registration_confirmation($game_id, $chat_id, $user_id, $conn, $co
     $game = $prefetchedGame ?? fetch_game_by_id($conn, $game_id);
 
     if ($game) {
-        // Формируем сообщение
-        $msg = "✅ Вы зарегистрированы на игру:\n\n" .
-               "🎮 <b>" . htmlspecialchars($game['game_number'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . "</b>\n" .
-               "📅 " . htmlspecialchars($game['game_date'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . " в " . htmlspecialchars($game['start_time'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . "\n" .
-               "📍 " . htmlspecialchars($game['location'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . "\n\n" .
-               "Чтобы завершить регистрацию, введите название своей команды.";
+        $formattedDateTime = format_game_datetime($game['game_date'], $game['start_time']);
+        $formattedDateTimeEscaped = htmlspecialchars(
+            $formattedDateTime ?? trim($game['game_date'] . ' ' . $game['start_time']),
+            ENT_QUOTES | ENT_SUBSTITUTE,
+            'UTF-8'
+        );
+
+        $msg = "✅ Отличный выбор!\n\n" .
+               "🎮 " . htmlspecialchars($game['game_number'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . "\n" .
+               "📅 " . $formattedDateTimeEscaped . "\n" .
+               "📍 " . htmlspecialchars($game['location'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . "\n" .
+               "💰 " . htmlspecialchars($game['price'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . "\n\n" .
+               "Готовы присоединиться к игре? Тогда просто введите название своей команды 👇";
 
         // Инлайн-кнопка "Ввести название команды"
         $keyboard = [
@@ -550,7 +557,7 @@ function format_game_datetime(string $date, string $time)
 function fetch_game_by_id($conn, $game_id)
 {
     $stmt = $conn->prepare("
-        SELECT id, game_number, game_date, start_time, location
+        SELECT id, game_number, game_date, start_time, location, price
         FROM games
         WHERE id = :id
         LIMIT 1
