@@ -540,15 +540,28 @@ function save_quantity_and_confirm($conn, $config, $chat_id, $user_id, $registra
                 "📅 {$formattedDateTimeEscaped}\n" .
                 "📍 {$locationEscaped}\n" .
                 "👥 Команда: «{$teamEscaped}» (Количество игроков: {$quantityEscaped})\n\n" .
-                "Мы вас ждём! Если что-то нужно изменить — просто напишите в чат.";
+                "Мы вас ждём! Если что-то нужно изменить — просто напишите в чат.\n\n" .
+                "А пока — вот ваши основные кнопки, вдруг пригодятся 👇";
         }
     }
 
     if ($confirm === null) {
-        $confirm = "✅ Команда «" . $teamEscaped . "» сохранена.\nРазмер команды: " . $quantityEscaped . ".";
+        $confirm = "✅ Команда «" . $teamEscaped . "» сохранена.\nРазмер команды: " . $quantityEscaped . ".\n\n" .
+            "А пока — вот ваши основные кнопки, вдруг пригодятся 👇";
     }
 
-    send_telegram($config, $chat_id, $confirm, null, 'HTML');
+    $keyboard = [
+        'inline_keyboard' => [
+            [
+                ['text' => '📋 Посмотреть список игр', 'callback_data' => 'show_games']
+            ],
+            [
+                ['text' => 'ℹ️ Узнать про формат игр', 'callback_data' => 'show_game_formats']
+            ]
+        ]
+    ];
+
+    send_telegram($config, $chat_id, $confirm, $keyboard, 'HTML');
 
     log_bot_message($user_id, strip_tags($confirm), $conn);
 }
