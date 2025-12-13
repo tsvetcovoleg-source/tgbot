@@ -359,7 +359,10 @@ function renderRegistrations(registrations) {
     }
 
     container.innerHTML = registrations.map((reg) => {
-        const quantityLabel = reg.quantity ? ` · ${reg.quantity} чел.` : '';
+        const quantityValue = reg.quantity ? String(reg.quantity) : '';
+        const quantityLabel = quantityValue
+            ? ` · ${escapeHtml(quantityValue)}${quantityValue === 'Пока не знаем' ? '' : ' чел.'}`
+            : '';
         const teamLabel = reg.team ? `<strong>${escapeHtml(reg.team)}</strong>${quantityLabel}` : 'Без названия';
         return `
             <div class="registration">

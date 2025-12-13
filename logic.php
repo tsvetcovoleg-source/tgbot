@@ -118,6 +118,10 @@ function handle_callback($data, $user_id, $chat_id, $config, $conn, $callback) {
         return handle_enter_team_button($data, $chat_id, $user_id, $conn, $config, $callback);
     }
 
+    if (strpos($data, 'quantity_') === 0) {
+        return handle_quantity_selection($data, $chat_id, $user_id, $conn, $config, $callback);
+    }
+
 
     // можно добавить другие...
 }
@@ -351,9 +355,9 @@ function handle_free_text($text, $chat_id, $user_id, $conn, $config) {
         return 'Не удалось определить пользователя. Пожалуйста, отправьте команду /start.';
     }
 
-    $teamName = trim($text);
+    $userInput = trim($text);
 
-    if ($teamName === '') {
+    if ($userInput === '') {
         return 'Название команды не может быть пустым. Пожалуйста, отправьте текстовое название.';
     }
 
@@ -389,28 +393,122 @@ function handle_free_text($text, $chat_id, $user_id, $conn, $config) {
         // Обновляем team тем, что прислал пользователь, и просим указать количество игроков
         $stmtUp = $conn->prepare("UPDATE registrations SET team = :team WHERE id = :rid");
         $stmtUp->execute([
-            ':team' => $teamName,
+            ':team' => $userInput,
             ':rid'  => $registration['id']
         ]);
 
-        $askQuantity = "Введите количество игроков в команде";
-        send_telegram($config, $chat_id, $askQuantity, null, 'HTML');
+        $askQuantity = "Отлично! Теперь выберите, сколько человек будет в вашей команде 👇";
+        $keyboard = build_quantity_keyboard();
+        send_telegram($config, $chat_id, $askQuantity, $keyboard, 'HTML');
         log_bot_message($user_id, strip_tags($askQuantity), $conn);
         return null;
     }
 
     // Если команда уже указана, ожидаем количество игроков
-    $quantity = filter_var($teamName, FILTER_VALIDATE_INT, [
-        'options' => ['min_range' => 1]
-    ]);
+    $quantity = normalize_quantity_input($userInput);
 
-    if ($quantity === false) {
-        $askQuantityAgain = "Пожалуйста, укажите количество игроков числом (например, 4).";
-        send_telegram($config, $chat_id, $askQuantityAgain, null, 'HTML');
+    if ($quantity === null) {
+        $askQuantityAgain = "Пожалуйста, выберите подходящий вариант на кнопке или укажите количество числом.";
+        $keyboard = build_quantity_keyboard();
+        send_telegram($config, $chat_id, $askQuantityAgain, $keyboard, 'HTML');
         log_bot_message($user_id, strip_tags($askQuantityAgain), $conn);
         return null;
     }
 
+    save_quantity_and_confirm($conn, $config, $chat_id, $user_id, $registration, $quantity);
+    return null;
+}
+
+function handle_quantity_selection($data, $chat_id, $user_id, $conn, $config, $callback) {
+    $selectedKey = str_replace('quantity_', '', $data);
+    $options = get_quantity_options();
+
+    $selectedQuantity = null;
+    foreach ($options as $label => $key) {
+        if ($key === $selectedKey) {
+            $selectedQuantity = $label;
+            break;
+        }
+    }
+
+    if ($selectedQuantity === null) {
+        return null;
+    }
+
+    $stmt = $conn->prepare("
+        SELECT id, team
+        FROM registrations
+        WHERE user_id = :uid
+          AND team IS NOT NULL AND team != ''
+          AND quantity IS NULL
+        ORDER BY id DESC
+        LIMIT 1
+    ");
+    $stmt->execute([':uid' => $user_id]);
+    $registration = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    if (!$registration) {
+        return null;
+    }
+
+    save_quantity_and_confirm($conn, $config, $chat_id, $user_id, $registration, $selectedQuantity);
+
+    return null;
+}
+
+function get_quantity_options() {
+    return [
+        '3-4'          => '3_4',
+        '5-6'          => '5_6',
+        '7-8'          => '7_8',
+        '9-10'         => '9_10',
+        'Пока не знаем' => 'unknown',
+    ];
+}
+
+function build_quantity_keyboard() {
+    $options = get_quantity_options();
+    $keyboard = ['inline_keyboard' => []];
+
+    foreach ($options as $label => $key) {
+        $keyboard['inline_keyboard'][] = [
+            ['text' => $label, 'callback_data' => 'quantity_' . $key]
+        ];
+    }
+
+    return $keyboard;
+}
+
+function normalize_quantity_input($input) {
+    $trimmed = trim($input);
+
+    if ($trimmed === '') {
+        return null;
+    }
+
+    $options = get_quantity_options();
+    foreach ($options as $label => $key) {
+        if (mb_strtolower($trimmed) === mb_strtolower($label)) {
+            return $label;
+        }
+    }
+
+    if (preg_match('/^(\d+)\s*-\s*(\d+)$/u', $trimmed, $matches)) {
+        return $matches[1] . '-' . $matches[2];
+    }
+
+    $quantityInt = filter_var($trimmed, FILTER_VALIDATE_INT, [
+        'options' => ['min_range' => 1]
+    ]);
+
+    if ($quantityInt !== false) {
+        return (string) $quantityInt;
+    }
+
+    return null;
+}
+
+function save_quantity_and_confirm($conn, $config, $chat_id, $user_id, $registration, $quantity) {
     $stmtUp = $conn->prepare("UPDATE registrations SET quantity = :qty WHERE id = :rid");
     $stmtUp->execute([
         ':qty' => $quantity,
@@ -418,11 +516,11 @@ function handle_free_text($text, $chat_id, $user_id, $conn, $config) {
     ]);
 
     $teamEscaped = htmlspecialchars($registration['team'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
-    $confirm = "✅ Команда «".$teamEscaped."» сохранена.";
+    $quantityEscaped = htmlspecialchars($quantity, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+    $confirm = "✅ Команда «" . $teamEscaped . "» сохранена.\nРазмер команды: " . $quantityEscaped . ".";
     send_telegram($config, $chat_id, $confirm, null, 'HTML');
 
     log_bot_message($user_id, strip_tags($confirm), $conn);
-    return null;
 }
 
 

@@ -138,7 +138,7 @@ if ($action === 'get_game_details') {
         return [
             'id' => (int) $row['id'],
             'team' => $row['team'],
-            'quantity' => isset($row['quantity']) ? (int) $row['quantity'] : null,
+            'quantity' => $row['quantity'] ?? null,
             'created_at' => $row['created_at'],
             'user_label' => $label,
             'telegram_id' => $row['telegram_id'],
