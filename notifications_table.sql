@@ -1,3 +1,8 @@
+-- Приводим тип первичного ключа пользователей к BIGINT UNSIGNED,
+-- чтобы его можно было безопасно ссылать из таблицы подписок.
+ALTER TABLE users
+    MODIFY COLUMN id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT;
+
 CREATE TABLE IF NOT EXISTS format_subscriptions (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     user_id BIGINT UNSIGNED NOT NULL,
