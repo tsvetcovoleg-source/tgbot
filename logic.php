@@ -252,7 +252,7 @@ function build_game_format_intro(array $types, array $config): string
         return '';
     }
 
-    $message = build_format_info_message($config, [$primaryFormat]);
+    $message = build_format_info_message($config, [$primaryFormat], false);
 
     if ($message === null) {
         return '';
@@ -261,7 +261,7 @@ function build_game_format_intro(array $types, array $config): string
     return $message . "\n\n";
 }
 
-function build_format_info_message(array $config, array $onlyFormats = null): ?string
+function build_format_info_message(array $config, array $onlyFormats = null, bool $includeLinks = true): ?string
 {
     $definitions = get_game_format_definitions();
 
@@ -287,15 +287,28 @@ function build_format_info_message(array $config, array $onlyFormats = null): ?s
     $messages = [];
 
     foreach ($definitions as $definition) {
-        if (!isset($definition['start_payload'], $definition['title'], $definition['description'], $definition['link_text'])) {
-            continue;
+        $requiredKeys = ['start_payload', 'title', 'description'];
+
+        if ($includeLinks) {
+            $requiredKeys[] = 'link_text';
         }
 
-        $link = sprintf('https://t.me/%s?start=%s', rawurlencode($botUsername), rawurlencode($definition['start_payload']));
+        foreach ($requiredKeys as $key) {
+            if (!isset($definition[$key])) {
+                continue 2;
+            }
+        }
 
-        $messages[] = $definition['title'] . "\n" .
-            $definition['description'] . "\n" .
-            '<a href="' . htmlspecialchars($link, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '">' . htmlspecialchars($definition['link_text'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '</a>';
+        $message = $definition['title'] . "\n" . $definition['description'];
+
+        if ($includeLinks) {
+            $link = sprintf('https://t.me/%s?start=%s', rawurlencode($botUsername), rawurlencode($definition['start_payload']));
+
+            $message .= "\n" . '<a href="' . htmlspecialchars($link, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '">' .
+                htmlspecialchars($definition['link_text'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '</a>';
+        }
+
+        $messages[] = $message;
     }
 
     return implode("\n\n", $messages);
