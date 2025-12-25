@@ -318,26 +318,6 @@ function send_registration_confirmation($game_id, $chat_id, $user_id, $conn, $co
 }
 
 function prepare_registration_for_team_entry($conn, $user_id, $game_id) {
-    $stmt = $conn->prepare("
-        SELECT id
-        FROM registrations
-        WHERE user_id = :uid AND game_id = :gid
-        ORDER BY id DESC
-        LIMIT 1
-    ");
-    $stmt->execute([
-        ':uid' => $user_id,
-        ':gid' => $game_id
-    ]);
-
-    $registrationId = $stmt->fetchColumn();
-
-    if ($registrationId) {
-        $stmtReset = $conn->prepare("UPDATE registrations SET team = NULL, quantity = NULL WHERE id = :rid");
-        $stmtReset->execute([':rid' => $registrationId]);
-        return;
-    }
-
     $stmtInsert = $conn->prepare("
         INSERT INTO registrations (user_id, game_id, created_at)
         VALUES (:uid, :gid, NOW())
