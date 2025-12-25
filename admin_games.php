@@ -13,20 +13,39 @@ render_admin_layout_start('Игры — Админка', 'games', 'Игры');
             <h2>Список игр</h2>
             <a class="link" href="admin_create_game.php">Создать новую игру</a>
         </div>
-        <div class="games-grid" id="games-grid">
-            <?php foreach ($games as $game): ?>
-                <div class="game" data-game-id="<?php echo (int) $game['id']; ?>">
-                    <div class="badge"><?php echo htmlspecialchars($game['type'] ?: 'unknown'); ?></div>
-                    <div class="game-title"><strong><?php echo htmlspecialchars($game['game_number']); ?></strong></div>
-                    <div class="muted game-date"><?php echo htmlspecialchars($game['game_date']); ?> в <?php echo htmlspecialchars($game['start_time']); ?></div>
-                    <div class="game-location"><?php echo htmlspecialchars($game['location']); ?></div>
-                    <div class="muted game-price">Стоимость: <?php echo htmlspecialchars($game['price']); ?></div>
-                    <div class="muted">ID: <?php echo (int) $game['id']; ?></div>
-                    <div class="game-actions">
-                        <button type="button" class="outline-btn view-game" data-game-id="<?php echo (int) $game['id']; ?>">Открыть</button>
-                    </div>
-                </div>
-            <?php endforeach; ?>
+        <div class="table-wrapper">
+            <table id="games-table">
+                <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Номер</th>
+                    <th>Дата</th>
+                    <th>Время</th>
+                    <th>Локация</th>
+                    <th>Стоимость</th>
+                    <th>Тип</th>
+                    <th></th>
+                </tr>
+                </thead>
+                <tbody>
+                <?php foreach ($games as $game): ?>
+                    <tr data-game-id="<?php echo (int) $game['id']; ?>">
+                        <td><?php echo (int) $game['id']; ?></td>
+                        <td><?php echo htmlspecialchars($game['game_number']); ?></td>
+                        <td><?php echo htmlspecialchars($game['game_date']); ?></td>
+                        <td><?php echo htmlspecialchars($game['start_time']); ?></td>
+                        <td><?php echo htmlspecialchars($game['location']); ?></td>
+                        <td><?php echo htmlspecialchars($game['price']); ?></td>
+                        <td><span class="badge"><?php echo htmlspecialchars($game['type'] ?: 'unknown'); ?></span></td>
+                        <td>
+                            <div class="table-actions">
+                                <button type="button" class="outline-btn view-game" data-game-id="<?php echo (int) $game['id']; ?>">Открыть</button>
+                            </div>
+                        </td>
+                    </tr>
+                <?php endforeach; ?>
+                </tbody>
+            </table>
         </div>
         <?php if (!$games): ?>
             <p class="muted" id="games-empty">Пока нет созданных игр.</p>
@@ -35,42 +54,47 @@ render_admin_layout_start('Игры — Админка', 'games', 'Игры');
 
     <div class="card" id="game-detail-card" style="display: none;">
         <h2 id="game-detail-title">Детали игры</h2>
-        <div class="game-detail">
-            <form id="game-edit-form">
-                <input type="hidden" id="edit_game_id" name="game_id">
-                <label for="edit_game_number">Название/номер игры</label>
-                <input type="text" id="edit_game_number" name="game_number" required>
+        <div class="tabs" id="game-tabs">
+            <button type="button" class="tab-btn active" data-tab="details-tab">Данные игры</button>
+            <button type="button" class="tab-btn" data-tab="registrations-tab">Регистрации</button>
+        </div>
+        <div class="tab-content active" id="details-tab">
+            <div class="game-detail">
+                <form id="game-edit-form">
+                    <input type="hidden" id="edit_game_id" name="game_id">
+                    <label for="edit_game_number">Название/номер игры</label>
+                    <input type="text" id="edit_game_number" name="game_number" required>
 
-                <label for="edit_game_date">Дата (YYYY-MM-DD)</label>
-                <input type="date" id="edit_game_date" name="game_date" required>
+                    <label for="edit_game_date">Дата (YYYY-MM-DD)</label>
+                    <input type="date" id="edit_game_date" name="game_date" required>
 
-                <label for="edit_start_time">Время начала (HH:MM)</label>
-                <input type="time" id="edit_start_time" name="start_time" required>
+                    <label for="edit_start_time">Время начала (HH:MM)</label>
+                    <input type="time" id="edit_start_time" name="start_time" required>
 
-                <label for="edit_location">Локация</label>
-                <input type="text" id="edit_location" name="location" required>
+                    <label for="edit_location">Локация</label>
+                    <input type="text" id="edit_location" name="location" required>
 
-                <label for="edit_price">Стоимость</label>
-                <input type="text" id="edit_price" name="price" required>
+                    <label for="edit_price">Стоимость</label>
+                    <input type="text" id="edit_price" name="price" required>
 
-                <label for="edit_type">Тип игры</label>
-                <select id="edit_type" name="type" required>
-                    <option value="">-- выберите --</option>
-                    <option value="quiz">quiz</option>
-                    <option value="lightquiz">lightquiz</option>
-                    <option value="detective">detective</option>
-                    <option value="quest">quest</option>
-                </select>
+                    <label for="edit_type">Тип игры</label>
+                    <select id="edit_type" name="type" required>
+                        <option value="">-- выберите --</option>
+                        <option value="quiz">quiz</option>
+                        <option value="lightquiz">lightquiz</option>
+                        <option value="detective">detective</option>
+                        <option value="quest">quest</option>
+                    </select>
 
-                <button type="submit">Сохранить изменения</button>
-                <p id="game-edit-status"></p>
-            </form>
-
-            <div>
-                <h3>Регистрации</h3>
-                <div id="registrations-list" class="registrations">
-                    <p class="muted" id="registrations-empty">Нет регистраций на эту игру</p>
-                </div>
+                    <button type="submit">Сохранить изменения</button>
+                    <p id="game-edit-status"></p>
+                </form>
+            </div>
+        </div>
+        <div class="tab-content" id="registrations-tab">
+            <h3>Регистрации</h3>
+            <div id="registrations-list" class="registrations">
+                <p class="muted" id="registrations-empty">Нет регистраций на эту игру</p>
             </div>
         </div>
     </div>
@@ -142,6 +166,8 @@ render_admin_layout_start('Игры — Админка', 'games', 'Игры');
 
         currentRegistrations = registrations || [];
         renderRegistrations(currentRegistrations);
+
+        setActiveTab('details-tab');
     }
 
     function loadGameDetails(gameId) {
@@ -165,36 +191,45 @@ render_admin_layout_start('Игры — Админка', 'games', 'Игры');
     }
 
     function updateGameCard(game) {
-        const grid = document.getElementById('games-grid');
-        if (!grid) return;
-        const card = grid.querySelector(`.game[data-game-id="${game.id}"]`);
-        if (!card) return;
+        const table = document.getElementById('games-table');
+        if (!table) return;
+        const row = table.querySelector(`tr[data-game-id="${game.id}"]`);
+        if (!row) return;
 
-        const title = card.querySelector('.game-title');
-        if (title) title.innerHTML = `<strong>${escapeHtml(game.game_number)}</strong>`;
-
-        const date = card.querySelector('.game-date');
-        if (date) date.textContent = `${game.game_date} в ${game.start_time}`;
-
-        const location = card.querySelector('.game-location');
-        if (location) location.textContent = game.location;
-
-        const price = card.querySelector('.game-price');
-        if (price) price.textContent = `Стоимость: ${game.price}`;
-
-        const badge = card.querySelector('.badge');
-        if (badge) badge.textContent = game.type || 'unknown';
+        const cells = row.querySelectorAll('td');
+        if (cells.length >= 7) {
+            cells[1].textContent = game.game_number;
+            cells[2].textContent = game.game_date;
+            cells[3].textContent = game.start_time;
+            cells[4].textContent = game.location;
+            cells[5].textContent = game.price;
+            const badge = cells[6].querySelector('.badge');
+            if (badge) badge.textContent = game.type || 'unknown';
+        }
     }
 
-    const gamesGrid = document.getElementById('games-grid');
-    if (gamesGrid) {
-        gamesGrid.addEventListener('click', (event) => {
+    const gamesTable = document.getElementById('games-table');
+    if (gamesTable) {
+        gamesTable.addEventListener('click', (event) => {
             const btn = event.target.closest('.view-game');
             if (btn && btn.dataset.gameId) {
                 loadGameDetails(btn.dataset.gameId);
             }
         });
     }
+
+    function setActiveTab(tabId) {
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.tab === tabId);
+        });
+        document.querySelectorAll('.tab-content').forEach(tab => {
+            tab.classList.toggle('active', tab.id === tabId);
+        });
+    }
+
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.addEventListener('click', () => setActiveTab(btn.dataset.tab));
+    });
 
     const gameEditForm = document.getElementById('game-edit-form');
     if (gameEditForm) {
