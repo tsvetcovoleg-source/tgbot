@@ -318,14 +318,38 @@ function send_registration_confirmation($game_id, $chat_id, $user_id, $conn, $co
 }
 
 function prepare_registration_for_team_entry($conn, $user_id, $game_id) {
-    $stmtInsert = $conn->prepare("
-        INSERT INTO registrations (user_id, game_id, created_at)
-        VALUES (:uid, :gid, NOW())
-    ");
-    $stmtInsert->execute([
-        ':uid' => $user_id,
-        ':gid' => $game_id
-    ]);
+    try {
+        $stmtInsert = $conn->prepare("
+            INSERT INTO registrations (user_id, game_id, created_at)
+            VALUES (:uid, :gid, NOW())
+        ");
+        $stmtInsert->execute([
+            ':uid' => $user_id,
+            ':gid' => $game_id
+        ]);
+    } catch (PDOException $e) {
+        // Если в БД стоит уникальный индекс на (user_id, game_id),
+        // удаляем предыдущие записи и пробуем создать новую ещё раз.
+        if ($e->getCode() === '23000') {
+            $stmtDelete = $conn->prepare("DELETE FROM registrations WHERE user_id = :uid AND game_id = :gid");
+            $stmtDelete->execute([
+                ':uid' => $user_id,
+                ':gid' => $game_id
+            ]);
+
+            $stmtInsert = $conn->prepare("
+                INSERT INTO registrations (user_id, game_id, created_at)
+                VALUES (:uid, :gid, NOW())
+            ");
+            $stmtInsert->execute([
+                ':uid' => $user_id,
+                ':gid' => $game_id
+            ]);
+            return;
+        }
+
+        throw $e;
+    }
 }
 
 function handle_enter_team_button($data, $chat_id, $user_id, $conn, $config, $callback) {
