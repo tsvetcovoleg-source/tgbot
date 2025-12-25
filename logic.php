@@ -282,7 +282,13 @@ function send_registration_confirmation($game_id, $chat_id, $user_id, $conn, $co
     $teamSuggestionsKeyboard = null;
 
     if ($game) {
-        prepare_registration_for_team_entry($conn, $user_id, $game_id);
+        try {
+            prepare_registration_for_team_entry($conn, $user_id, $game_id);
+        } catch (Exception $e) {
+            $message = 'Не удалось начать новую регистрацию. Пожалуйста, попробуйте ещё раз или напишите в чат, если проблема повторяется.';
+            send_reply($config, $chat_id, $message, null, $user_id, $conn);
+            return null;
+        }
 
         $formattedDateTime = format_game_datetime($game['game_date'], $game['start_time']);
         $formattedDateTimeEscaped = htmlspecialchars(
@@ -318,24 +324,51 @@ function send_registration_confirmation($game_id, $chat_id, $user_id, $conn, $co
 }
 
 function prepare_registration_for_team_entry($conn, $user_id, $game_id) {
-    ensure_multiple_registrations_allowed($conn);
+    static $uniqueIndexDropAttempted = false;
 
-    $stmtInsert = $conn->prepare("
-        INSERT INTO registrations (user_id, game_id, created_at)
-        VALUES (:uid, :gid, NOW())
-    ");
-    $stmtInsert->execute([
-        ':uid' => $user_id,
-        ':gid' => $game_id
-    ]);
+    try {
+        $stmtInsert = $conn->prepare("
+            INSERT INTO registrations (user_id, game_id, created_at)
+            VALUES (:uid, :gid, NOW())
+        ");
+        $stmtInsert->execute([
+            ':uid' => $user_id,
+            ':gid' => $game_id
+        ]);
+        return;
+    } catch (PDOException $e) {
+        if ($e->getCode() === '23000' && !$uniqueIndexDropAttempted) {
+            $uniqueIndexDropAttempted = true;
+
+            $dropped = drop_user_game_unique_index($conn);
+
+            if ($dropped) {
+                $stmtInsert = $conn->prepare("
+                    INSERT INTO registrations (user_id, game_id, created_at)
+                    VALUES (:uid, :gid, NOW())
+                ");
+                $stmtInsert->execute([
+                    ':uid' => $user_id,
+                    ':gid' => $game_id
+                ]);
+                return;
+            }
+        }
+
+        throw $e;
+    }
 }
 
-function ensure_multiple_registrations_allowed($conn) {
-    $stmt = $conn->query("SHOW INDEX FROM registrations");
-    $indexes = $stmt ? $stmt->fetchAll(PDO::FETCH_ASSOC) : [];
+function drop_user_game_unique_index($conn) {
+    try {
+        $stmt = $conn->query("SHOW INDEX FROM registrations");
+        $indexes = $stmt ? $stmt->fetchAll(PDO::FETCH_ASSOC) : [];
+    } catch (Exception $e) {
+        return false;
+    }
 
     if (!$indexes) {
-        return;
+        return false;
     }
 
     $uniqueIndexes = [];
@@ -358,9 +391,17 @@ function ensure_multiple_registrations_allowed($conn) {
 
         if ($normalized === ['game_id', 'user_id']) {
             $safeKeyName = str_replace('`', '``', $keyName);
-            $conn->exec("ALTER TABLE registrations DROP INDEX `{$safeKeyName}`");
+
+            try {
+                $conn->exec("ALTER TABLE registrations DROP INDEX `{$safeKeyName}`");
+                return true;
+            } catch (Exception $e) {
+                return false;
+            }
         }
     }
+
+    return false;
 }
 
 function handle_enter_team_button($data, $chat_id, $user_id, $conn, $config, $callback) {
