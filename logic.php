@@ -111,7 +111,6 @@ function handle_callback($data, $user_id, $chat_id, $config, $conn, $callback) {
         return handle_quiz_games_command($chat_id, $user_id, $conn, $config);
     }
 
-    // было: if (str_starts_with($data, 'register_')) {
     if (strpos($data, 'register_') === 0) {
         return handle_register_button($data, $chat_id, $user_id, $conn, $config, $callback, null);
     }
@@ -278,6 +277,8 @@ function send_registration_confirmation($game_id, $chat_id, $user_id, $conn, $co
     $game = $prefetchedGame ?? fetch_game_by_id($conn, $game_id);
 
     if ($game) {
+        prepare_registration_for_team_entry($conn, $user_id, $game_id);
+
         $formattedDateTime = format_game_datetime($game['game_date'], $game['start_time']);
         $formattedDateTimeEscaped = htmlspecialchars(
             $formattedDateTime ?? trim($game['game_date'] . ' ' . $game['start_time']),
@@ -285,21 +286,18 @@ function send_registration_confirmation($game_id, $chat_id, $user_id, $conn, $co
             'UTF-8'
         );
 
+        $keyboard = build_team_suggestions_keyboard($conn, $user_id);
+
+        $teamPrompt = $keyboard
+            ? "Готовы присоединиться к игре? Тогда просто введите название в ответ на это сообщение либо выберите из предложенных ниже."
+            : "Готовы присоединиться к игре? Тогда просто введите название в ответ на это сообщение.";
+
         $msg = "✅ Отличный выбор!\n\n" .
                "🎮 " . htmlspecialchars($game['game_number'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . "\n" .
                "📅 " . $formattedDateTimeEscaped . "\n" .
                "📍 " . htmlspecialchars($game['location'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . "\n" .
                "💰 " . htmlspecialchars($game['price'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . "\n\n" .
-               "Готовы присоединиться к игре? Тогда просто введите название своей команды 👇";
-
-        // Инлайн-кнопка "Ввести название команды"
-        $keyboard = [
-            'inline_keyboard' => [
-                [
-                    ['text' => '📝 Ввести название команды', 'callback_data' => 'enter_team_' . $game_id]
-                ]
-            ]
-        ];
+               $teamPrompt;
 
     } else {
         // Если игра не найдена (например, удалили из БД)
@@ -314,15 +312,9 @@ function send_registration_confirmation($game_id, $chat_id, $user_id, $conn, $co
     log_bot_message($user_id, strip_tags($msg), $conn);
 }
 
-function handle_enter_team_button($data, $chat_id, $user_id, $conn, $config, $callback) {
-    update_user_status($conn, $user_id, 1);
-
-    // Получаем game_id из callback_data: enter_team_{id}
-    $game_id = (int) str_replace('enter_team_', '', $data);
-
-    // Проверяем, существует ли уже регистрация пользователя на эту игру
+function prepare_registration_for_team_entry($conn, $user_id, $game_id) {
     $stmt = $conn->prepare("
-        SELECT id, team
+        SELECT id
         FROM registrations
         WHERE user_id = :uid AND game_id = :gid
         ORDER BY id DESC
@@ -333,28 +325,38 @@ function handle_enter_team_button($data, $chat_id, $user_id, $conn, $config, $ca
         ':gid' => $game_id
     ]);
 
-    $registration = $stmt->fetch(PDO::FETCH_ASSOC);
+    $registrationId = $stmt->fetchColumn();
 
-    if ($registration) {
-        $reg_id = (int) $registration['id'];
-
-        // Сбрасываем предыдущее название команды и количество, чтобы пользователь мог ввести новое
+    if ($registrationId) {
         $stmtReset = $conn->prepare("UPDATE registrations SET team = NULL, quantity = NULL WHERE id = :rid");
-        $stmtReset->execute([':rid' => $reg_id]);
-    } else {
-        // Создаём новую регистрацию: только user_id, game_id, created_at
-        $stmtInsert = $conn->prepare("
-            INSERT INTO registrations (user_id, game_id, created_at)
-            VALUES (:uid, :gid, NOW())
-        ");
-        $stmtInsert->execute([
-            ':uid' => $user_id,
-            ':gid' => $game_id
-        ]);
+        $stmtReset->execute([':rid' => $registrationId]);
+        return;
     }
 
+    $stmtInsert = $conn->prepare("
+        INSERT INTO registrations (user_id, game_id, created_at)
+        VALUES (:uid, :gid, NOW())
+    ");
+    $stmtInsert->execute([
+        ':uid' => $user_id,
+        ':gid' => $game_id
+    ]);
+}
+
+function handle_enter_team_button($data, $chat_id, $user_id, $conn, $config, $callback) {
+    update_user_status($conn, $user_id, 1);
+
+    // Получаем game_id из callback_data: enter_team_{id}
+    $game_id = (int) str_replace('enter_team_', '', $data);
+
+    prepare_registration_for_team_entry($conn, $user_id, $game_id);
+
     // Сообщение-подсказка
-    $text = "📝 В ответе на это сообщение введите <b>название вашей команды</b>.";
+    $keyboard = build_team_suggestions_keyboard($conn, $user_id);
+
+    $text = $keyboard
+        ? "📝 В ответе на это сообщение введите <b>название вашей команды</b> или выберите один из предложенных вариантов ниже."
+        : "📝 В ответе на это сообщение введите <b>название вашей команды</b>.";
 
     // Привязываем как «ответ» к сообщению с кнопкой (если есть message_id)
     $params = [
@@ -364,6 +366,10 @@ function handle_enter_team_button($data, $chat_id, $user_id, $conn, $config, $ca
     ];
     if (isset($callback['message']['message_id'])) {
         $params['reply_to_message_id'] = $callback['message']['message_id'];
+    }
+
+    if ($keyboard) {
+        $params['reply_markup'] = json_encode($keyboard, JSON_UNESCAPED_UNICODE);
     }
 
     telegram_request($config, 'sendMessage', $params);
@@ -518,6 +524,53 @@ function build_quantity_keyboard() {
     }
 
     return $keyboard;
+}
+
+function build_team_suggestions_keyboard($conn, $user_id) {
+    $stmt = $conn->prepare("
+        SELECT team
+        FROM registrations
+        WHERE user_id = :uid AND team IS NOT NULL AND team != ''
+        ORDER BY id DESC
+        LIMIT 10
+    ");
+    $stmt->execute([':uid' => $user_id]);
+
+    $suggestions = [];
+
+    while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+        $team = trim($row['team']);
+
+        if ($team === '') {
+            continue;
+        }
+
+        if (!in_array($team, $suggestions, true)) {
+            $suggestions[] = $team;
+        }
+
+        if (count($suggestions) >= 3) {
+            break;
+        }
+    }
+
+    if (empty($suggestions)) {
+        return null;
+    }
+
+    $keyboardButtons = [];
+
+    foreach ($suggestions as $teamName) {
+        $keyboardButtons[] = [
+            ['text' => $teamName]
+        ];
+    }
+
+    return [
+        'keyboard' => $keyboardButtons,
+        'resize_keyboard' => true,
+        'one_time_keyboard' => true
+    ];
 }
 
 function normalize_quantity_input($input) {
