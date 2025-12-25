@@ -1,6 +1,6 @@
 CREATE TABLE IF NOT EXISTS format_subscriptions (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    user_id INT UNSIGNED NOT NULL,
+    user_id BIGINT UNSIGNED NOT NULL,
     format VARCHAR(50) NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE KEY uq_format_subscriptions_user_format (user_id, format),
