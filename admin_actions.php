@@ -165,14 +165,22 @@ if ($action === 'send_message') {
         exit;
     }
 
-    $stmt = $conn->prepare('SELECT telegram_id FROM users WHERE id = :id LIMIT 1');
+    $stmt = $conn->prepare('SELECT telegram_id, status FROM users WHERE id = :id LIMIT 1');
     $stmt->execute([':id' => $userId]);
-    $telegramId = $stmt->fetchColumn();
+    $userRow = $stmt->fetch(PDO::FETCH_ASSOC);
 
-    if (!$telegramId) {
+    if (!$userRow || !$userRow['telegram_id']) {
         http_response_code(404);
         echo json_encode(['error' => 'Пользователь не найден']);
         exit;
+    }
+
+    $telegramId = $userRow['telegram_id'];
+    $currentStatus = isset($userRow['status']) ? (int) $userRow['status'] : null;
+
+    if ($currentStatus === 1) {
+        $statusStmt = $conn->prepare('UPDATE users SET status = 2 WHERE id = :id');
+        $statusStmt->execute([':id' => $userId]);
     }
 
     telegram_request($config, 'sendMessage', [
