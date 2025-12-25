@@ -66,6 +66,17 @@ function render_admin_layout_start(string $title, string $activeNav, string $hea
             .link:hover { text-decoration: underline; }
             .success { color: #059669; }
             .error { color: #c00; }
+            table { width: 100%; border-collapse: collapse; }
+            th, td { padding: 10px 8px; border-bottom: 1px solid var(--border); text-align: left; font-size: 14px; }
+            th { font-size: 12px; color: #6b7280; letter-spacing: 0.04em; text-transform: uppercase; }
+            tr:hover td { background: #f8fafc; }
+            .table-wrapper { overflow-x: auto; }
+            .table-actions { display: flex; align-items: center; gap: 8px; }
+            .tabs { display: flex; gap: 8px; margin: 14px 0 10px; }
+            .tab-btn { border: 1px solid var(--border); background: #f8fafc; color: #0f172a; padding: 8px 12px; border-radius: 8px; cursor: pointer; font-weight: 600; }
+            .tab-btn.active { border-color: var(--blue); background: #e0edff; color: var(--blue-dark); }
+            .tab-content { display: none; }
+            .tab-content.active { display: block; }
             .games-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
             .game { border: 1px solid var(--border); padding: 12px; border-radius: 10px; background: #fafafa; display: flex; flex-direction: column; gap: 6px; }
             .badge { display: inline-block; padding: 4px 8px; border-radius: 6px; background: #eef2ff; color: #3730a3; font-size: 12px; margin-bottom: 6px; width: fit-content; }
@@ -73,6 +84,8 @@ function render_admin_layout_start(string $title, string $activeNav, string $hea
             .outline-btn { background: transparent; color: var(--blue); border: 1px solid var(--blue); }
             .outline-btn:hover { background: #f0f6ff; }
             .game-detail { display: grid; grid-template-columns: minmax(280px, 360px) 1fr; gap: 20px; align-items: start; }
+            .meta { display: flex; flex-wrap: wrap; gap: 10px; margin: 10px 0; }
+            .meta-item { background: #f8fafc; border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; font-size: 13px; }
             .registrations { border: 1px solid var(--border); border-radius: 10px; padding: 10px; background: #fafafa; max-height: 480px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
             .registration { border-bottom: 1px solid var(--border); padding-bottom: 8px; }
             .registration:last-child { border-bottom: none; }
