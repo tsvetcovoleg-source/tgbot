@@ -123,6 +123,10 @@ function handle_callback($data, $user_id, $chat_id, $config, $conn, $callback) {
         return handle_quantity_selection($data, $chat_id, $user_id, $conn, $config, $callback);
     }
 
+    if (strpos($data, 'team_suggestion_') === 0) {
+        return handle_team_suggestion_selection($data, $chat_id, $user_id, $conn, $config);
+    }
+
     if (strpos($data, 'subscribe_format_') === 0) {
         return handle_subscribe_format_button($data, $chat_id, $user_id, $conn, $config);
     }
@@ -275,6 +279,7 @@ function send_registration_confirmation($game_id, $chat_id, $user_id, $conn, $co
     update_user_status($conn, $user_id, 1);
 
     $game = $prefetchedGame ?? fetch_game_by_id($conn, $game_id);
+    $teamSuggestionsKeyboard = null;
 
     if ($game) {
         prepare_registration_for_team_entry($conn, $user_id, $game_id);
@@ -286,7 +291,9 @@ function send_registration_confirmation($game_id, $chat_id, $user_id, $conn, $co
             'UTF-8'
         );
 
-        $teamPrompt = "Готовы присоединиться к игре? Тогда просто введите название в ответ на это сообщение.";
+        $teamPrompt = "Готовы присоединиться к игре? Тогда просто введите название в ответ на это сообщение либо выберите название команды из списка ниже.";
+
+        $teamSuggestionsKeyboard = build_team_suggestions_keyboard($conn, $user_id);
 
         $msg = "✅ Отличный выбор!\n\n" .
                "🎮 " . htmlspecialchars($game['game_number'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . "\n" .
@@ -302,7 +309,7 @@ function send_registration_confirmation($game_id, $chat_id, $user_id, $conn, $co
     }
 
     // Отправляем пользователю
-    $replyMarkup = ['remove_keyboard' => true];
+    $replyMarkup = $teamSuggestionsKeyboard ?? ['remove_keyboard' => true];
 
     send_telegram($config, $chat_id, $msg, $replyMarkup, 'HTML');
 
@@ -518,7 +525,7 @@ function build_quantity_keyboard() {
     return $keyboard;
 }
 
-function build_team_suggestions_keyboard($conn, $user_id) {
+function get_recent_team_suggestions($conn, $user_id, $limit = 3) {
     $stmt = $conn->prepare("
         SELECT team
         FROM registrations
@@ -541,10 +548,16 @@ function build_team_suggestions_keyboard($conn, $user_id) {
             $suggestions[] = $team;
         }
 
-        if (count($suggestions) >= 3) {
+        if (count($suggestions) >= $limit) {
             break;
         }
     }
+
+    return $suggestions;
+}
+
+function build_team_suggestions_keyboard($conn, $user_id) {
+    $suggestions = get_recent_team_suggestions($conn, $user_id);
 
     if (empty($suggestions)) {
         return null;
@@ -552,17 +565,69 @@ function build_team_suggestions_keyboard($conn, $user_id) {
 
     $keyboardButtons = [];
 
-    foreach ($suggestions as $teamName) {
+    foreach ($suggestions as $index => $teamName) {
         $keyboardButtons[] = [
-            ['text' => $teamName]
+            ['text' => $teamName, 'callback_data' => 'team_suggestion_' . $index]
         ];
     }
 
     return [
-        'keyboard' => $keyboardButtons,
-        'resize_keyboard' => true,
-        'one_time_keyboard' => true
+        'inline_keyboard' => $keyboardButtons
     ];
+}
+
+function handle_team_suggestion_selection($data, $chat_id, $user_id, $conn, $config) {
+    $index = (int) str_replace('team_suggestion_', '', $data);
+
+    $suggestions = get_recent_team_suggestions($conn, $user_id);
+
+    if (!isset($suggestions[$index])) {
+        $message = '❌ Не удалось определить выбранное название команды. Пожалуйста, введите название вручную.';
+        send_reply($config, $chat_id, $message, null, $user_id, $conn);
+        return null;
+    }
+
+    $teamName = $suggestions[$index];
+
+    $stmt = $conn->prepare("
+        SELECT id, team, quantity
+        FROM registrations
+        WHERE user_id = :uid AND (team IS NULL OR team = '' OR quantity IS NULL)
+        ORDER BY id DESC
+        LIMIT 1
+    ");
+    $stmt->execute([':uid' => $user_id]);
+    $registration = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    if (!$registration) {
+        $message = '❌ Не удалось найти активную регистрацию. Пожалуйста, выберите игру из списка ещё раз.';
+        $keyboard = [
+            'inline_keyboard' => [
+                [
+                    ['text' => '📋 Посмотреть список игр', 'callback_data' => 'show_games']
+                ]
+            ]
+        ];
+
+        send_reply($config, $chat_id, $message, $keyboard, $user_id, $conn);
+        return null;
+    }
+
+    update_user_status($conn, $user_id, 1);
+
+    $stmtUp = $conn->prepare("UPDATE registrations SET team = :team WHERE id = :rid");
+    $stmtUp->execute([
+        ':team' => $teamName,
+        ':rid'  => $registration['id']
+    ]);
+
+    $askQuantity = "Отлично! Теперь выберите, сколько человек будет в вашей команде 👇";
+    $keyboard = build_quantity_keyboard();
+
+    send_telegram($config, $chat_id, $askQuantity, $keyboard, 'HTML');
+    log_bot_message($user_id, strip_tags($askQuantity), $conn);
+
+    return null;
 }
 
 function normalize_quantity_input($input) {
