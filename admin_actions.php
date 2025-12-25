@@ -121,7 +121,7 @@ if ($action === 'get_game_details') {
     }
 
     $regsStmt = $conn->prepare('
-        SELECT r.id, r.team, r.quantity, r.created_at, u.telegram_id, u.first_name, u.last_name, u.username
+        SELECT r.id, r.team, r.quantity, r.created_at, r.user_id, u.telegram_id, u.first_name, u.last_name, u.username
         FROM registrations r
         INNER JOIN users u ON r.user_id = u.id
         WHERE r.game_id = :gid
@@ -140,6 +140,7 @@ if ($action === 'get_game_details') {
             'team' => $row['team'],
             'quantity' => $row['quantity'] ?? null,
             'created_at' => $row['created_at'],
+            'user_id' => (int) $row['user_id'],
             'user_label' => $label,
             'telegram_id' => $row['telegram_id'],
         ];
