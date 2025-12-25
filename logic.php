@@ -286,11 +286,7 @@ function send_registration_confirmation($game_id, $chat_id, $user_id, $conn, $co
             'UTF-8'
         );
 
-        $keyboard = build_team_suggestions_keyboard($conn, $user_id);
-
-        $teamPrompt = $keyboard
-            ? "Готовы присоединиться к игре? Тогда просто введите название в ответ на это сообщение либо выберите из предложенных ниже."
-            : "Готовы присоединиться к игре? Тогда просто введите название в ответ на это сообщение.";
+        $teamPrompt = "Готовы присоединиться к игре? Тогда просто введите название в ответ на это сообщение.";
 
         $msg = "✅ Отличный выбор!\n\n" .
                "🎮 " . htmlspecialchars($game['game_number'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . "\n" .
@@ -306,7 +302,9 @@ function send_registration_confirmation($game_id, $chat_id, $user_id, $conn, $co
     }
 
     // Отправляем пользователю
-    send_telegram($config, $chat_id, $msg, $keyboard, 'HTML');
+    $replyMarkup = ['remove_keyboard' => true];
+
+    send_telegram($config, $chat_id, $msg, $replyMarkup, 'HTML');
 
     // Логируем ответ бота
     log_bot_message($user_id, strip_tags($msg), $conn);
@@ -352,11 +350,7 @@ function handle_enter_team_button($data, $chat_id, $user_id, $conn, $config, $ca
     prepare_registration_for_team_entry($conn, $user_id, $game_id);
 
     // Сообщение-подсказка
-    $keyboard = build_team_suggestions_keyboard($conn, $user_id);
-
-    $text = $keyboard
-        ? "📝 В ответе на это сообщение введите <b>название вашей команды</b> или выберите один из предложенных вариантов ниже."
-        : "📝 В ответе на это сообщение введите <b>название вашей команды</b>.";
+    $text = "📝 В ответе на это сообщение введите <b>название вашей команды</b>.";
 
     // Привязываем как «ответ» к сообщению с кнопкой (если есть message_id)
     $params = [
@@ -368,9 +362,7 @@ function handle_enter_team_button($data, $chat_id, $user_id, $conn, $config, $ca
         $params['reply_to_message_id'] = $callback['message']['message_id'];
     }
 
-    if ($keyboard) {
-        $params['reply_markup'] = json_encode($keyboard, JSON_UNESCAPED_UNICODE);
-    }
+    $params['reply_markup'] = json_encode(['remove_keyboard' => true], JSON_UNESCAPED_UNICODE);
 
     telegram_request($config, 'sendMessage', $params);
 
