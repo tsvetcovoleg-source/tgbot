@@ -324,7 +324,7 @@ function send_registration_confirmation($game_id, $chat_id, $user_id, $conn, $co
 }
 
 function prepare_registration_for_team_entry($conn, $user_id, $game_id) {
-    static $uniqueIndexDropAttempted = false;
+    static $uniqueDropAttempted = false;
 
     try {
         $stmtInsert = $conn->prepare("
@@ -337,10 +337,10 @@ function prepare_registration_for_team_entry($conn, $user_id, $game_id) {
         ]);
         return;
     } catch (PDOException $e) {
-        if ($e->getCode() === '23000' && !$uniqueIndexDropAttempted) {
-            $uniqueIndexDropAttempted = true;
+        if ($e->getCode() === '23000' && !$uniqueDropAttempted) {
+            $uniqueDropAttempted = true;
 
-            $dropped = drop_user_game_unique_index($conn);
+            $dropped = drop_conflicting_registration_unique_indexes($conn);
 
             if ($dropped) {
                 $stmtInsert = $conn->prepare("
@@ -359,7 +359,7 @@ function prepare_registration_for_team_entry($conn, $user_id, $game_id) {
     }
 }
 
-function drop_user_game_unique_index($conn) {
+function drop_conflicting_registration_unique_indexes($conn) {
     try {
         $stmt = $conn->query("SHOW INDEX FROM registrations");
         $indexes = $stmt ? $stmt->fetchAll(PDO::FETCH_ASSOC) : [];
@@ -371,6 +371,7 @@ function drop_user_game_unique_index($conn) {
         return false;
     }
 
+    $droppedAny = false;
     $uniqueIndexes = [];
     foreach ($indexes as $index) {
         if (!isset($index['Key_name'])) {
@@ -384,24 +385,28 @@ function drop_user_game_unique_index($conn) {
     }
 
     foreach ($uniqueIndexes as $keyName => $columns) {
+        if (mb_strtolower((string) $keyName) === 'primary') {
+            continue;
+        }
+
         $normalized = array_map(static function ($col) {
             return mb_strtolower((string) $col);
         }, $columns);
-        sort($normalized);
 
-        if ($normalized === ['game_id', 'user_id']) {
+        // Любые уникальные индексы, которые ограничивают user_id/game_id, мешают создавать новые регистрации.
+        if (in_array('user_id', $normalized, true) || in_array('game_id', $normalized, true)) {
             $safeKeyName = str_replace('`', '``', $keyName);
 
             try {
                 $conn->exec("ALTER TABLE registrations DROP INDEX `{$safeKeyName}`");
-                return true;
+                $droppedAny = true;
             } catch (Exception $e) {
-                return false;
+                // продолжаем проверять остальные индексы
             }
         }
     }
 
-    return false;
+    return $droppedAny;
 }
 
 function handle_enter_team_button($data, $chat_id, $user_id, $conn, $config, $callback) {
