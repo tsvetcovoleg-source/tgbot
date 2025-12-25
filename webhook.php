@@ -7,20 +7,43 @@ require_once __DIR__ . '/logic.php';
 
 $conn = get_connection($config);
 
-function sync_user(PDO $conn, array $tg_user): ?int
+function sync_user(PDO $conn, array $tg_user, bool &$isNewUser = false): ?int
 {
     if (empty($tg_user['id'])) {
         return null;
     }
 
+    $isNewUser = false;
+
+    $stmt = $conn->prepare('SELECT id FROM users WHERE telegram_id = :tgid');
+    $stmt->execute([':tgid' => $tg_user['id']]);
+
+    $existingId = $stmt->fetchColumn();
+
+    if ($existingId) {
+        $stmt = $conn->prepare("
+            UPDATE users
+            SET first_name = :first,
+                last_name = :last,
+                username = :user,
+                language_code = :lang
+            WHERE telegram_id = :id
+        ");
+
+        $stmt->execute([
+            ':id' => $tg_user['id'],
+            ':first' => $tg_user['first_name'] ?? null,
+            ':last' => $tg_user['last_name'] ?? null,
+            ':user' => $tg_user['username'] ?? null,
+            ':lang' => $tg_user['language_code'] ?? null,
+        ]);
+
+        return (int) $existingId;
+    }
+
     $stmt = $conn->prepare("
         INSERT INTO users (telegram_id, first_name, last_name, username, language_code, status)
         VALUES (:id, :first, :last, :user, :lang, :status)
-        ON DUPLICATE KEY UPDATE
-            first_name = VALUES(first_name),
-            last_name = VALUES(last_name),
-            username = VALUES(username),
-            language_code = VALUES(language_code)
     ");
 
     $stmt->execute([
@@ -32,12 +55,11 @@ function sync_user(PDO $conn, array $tg_user): ?int
         ':status' => 1,
     ]);
 
-    $stmt = $conn->prepare('SELECT id FROM users WHERE telegram_id = :tgid');
-    $stmt->execute([':tgid' => $tg_user['id']]);
+    $isNewUser = true;
 
-    $user_id = $stmt->fetchColumn();
+    $newId = $conn->lastInsertId();
 
-    return $user_id ? (int) $user_id : null;
+    return $newId ? (int) $newId : null;
 }
 
 $content = file_get_contents("php://input");
@@ -54,7 +76,8 @@ if (isset($update['callback_query'])) {
     $chat_id = $callback['from']['id'];
     $data = $callback['data'];
 
-    $user_id = sync_user($conn, $callback['from'] ?? []);
+    $isNewUser = false;
+    $user_id = sync_user($conn, $callback['from'] ?? [], $isNewUser);
 
     // Логируем callback как "виртуальное сообщение"
     if ($user_id) {
@@ -87,7 +110,8 @@ $chat_id = $tg_user['id'];
 $text = trim($message['text'] ?? '');
 $telegram_message_id = $message['message_id'] ?? null;
 
-$user_id = sync_user($conn, $tg_user);
+$isNewUser = false;
+$user_id = sync_user($conn, $tg_user, $isNewUser);
 
 $stored_message_id = null;
 
@@ -106,7 +130,7 @@ if ($text !== '' && $user_id) {
 }
 
 // Получаем ответ из logic
-$reply = handle_message($text, $user_id, $chat_id, $config, $conn, null, $telegram_message_id, $stored_message_id);
+$reply = handle_message($text, $user_id, $chat_id, $config, $conn, null, $telegram_message_id, $stored_message_id, $isNewUser);
 
 // Отправка, если ответ не null
 if ($reply !== null && $reply !== '') {

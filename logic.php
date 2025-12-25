@@ -2,7 +2,7 @@
 
 require_once __DIR__ . '/format_helpers.php';
 
-function handle_message($text, $user_id, $chat_id, $config, $conn, $callback = null, $telegramMessageId = null, $storedMessageId = null) {
+function handle_message($text, $user_id, $chat_id, $config, $conn, $callback = null, $telegramMessageId = null, $storedMessageId = null, $isNewUser = false) {
     $original_text = trim($text);
     $text_lower = mb_strtolower($original_text);
 
@@ -10,6 +10,9 @@ function handle_message($text, $user_id, $chat_id, $config, $conn, $callback = n
         $payload = trim(mb_substr($original_text, mb_strlen('/start')));
         if ($payload !== '') {
             update_user_status($conn, $user_id, 1);
+            if ($isNewUser) {
+                handle_start_command($chat_id, $user_id, $conn, $config);
+            }
             return handle_start_with_payload($chat_id, $user_id, $conn, $config, $payload, $telegramMessageId, $storedMessageId);
         }
 
