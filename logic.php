@@ -278,11 +278,23 @@ function handle_text_registration_request($gameTitle, $chat_id, $user_id, $conn,
 function send_registration_confirmation($game_id, $chat_id, $user_id, $conn, $config, $prefetchedGame = null) {
     update_user_status($conn, $user_id, 1);
 
+    $existingRegistration = fetch_latest_registration($conn, $user_id, $game_id);
+
+    if (
+        $existingRegistration
+        && $existingRegistration['team'] !== null
+        && $existingRegistration['quantity'] !== null
+    ) {
+        $message = 'Вы уже зарегистрировали свою команду на эту игру, если у вас что-то изменилось или есть дополнительный запрос, то просто напишите сюда в чат и мы ответим вам при первой возможности';
+        send_reply($config, $chat_id, $message, null, $user_id, $conn);
+        return;
+    }
+
     $game = $prefetchedGame ?? fetch_game_by_id($conn, $game_id);
     $teamSuggestionsKeyboard = null;
 
     if ($game) {
-        prepare_registration_for_team_entry($conn, $user_id, $game_id);
+        prepare_registration_for_team_entry($conn, $user_id, $game_id, $existingRegistration);
 
         $formattedDateTime = format_game_datetime($game['game_date'], $game['start_time']);
         $formattedDateTimeEscaped = htmlspecialchars(
@@ -317,24 +329,18 @@ function send_registration_confirmation($game_id, $chat_id, $user_id, $conn, $co
     log_bot_message($user_id, strip_tags($msg), $conn);
 }
 
-function prepare_registration_for_team_entry($conn, $user_id, $game_id) {
-    $stmt = $conn->prepare("
-        SELECT id
-        FROM registrations
-        WHERE user_id = :uid AND game_id = :gid
-        ORDER BY id DESC
-        LIMIT 1
-    ");
-    $stmt->execute([
-        ':uid' => $user_id,
-        ':gid' => $game_id
-    ]);
+function prepare_registration_for_team_entry($conn, $user_id, $game_id, $existingRegistration = null) {
+    if ($existingRegistration === null) {
+        $existingRegistration = fetch_latest_registration($conn, $user_id, $game_id);
+    }
 
-    $registrationId = $stmt->fetchColumn();
+    if ($existingRegistration) {
+        if ($existingRegistration['team'] !== null && $existingRegistration['quantity'] !== null) {
+            return;
+        }
 
-    if ($registrationId) {
         $stmtReset = $conn->prepare("UPDATE registrations SET team = NULL, quantity = NULL WHERE id = :rid");
-        $stmtReset->execute([':rid' => $registrationId]);
+        $stmtReset->execute([':rid' => $existingRegistration['id']]);
         return;
     }
 
@@ -346,6 +352,23 @@ function prepare_registration_for_team_entry($conn, $user_id, $game_id) {
         ':uid' => $user_id,
         ':gid' => $game_id
     ]);
+}
+
+function fetch_latest_registration($conn, $user_id, $game_id)
+{
+    $stmt = $conn->prepare("
+        SELECT id, team, quantity
+        FROM registrations
+        WHERE user_id = :uid AND game_id = :gid
+        ORDER BY id DESC
+        LIMIT 1
+    ");
+    $stmt->execute([
+        ':uid' => $user_id,
+        ':gid' => $game_id
+    ]);
+
+    return $stmt->fetch(PDO::FETCH_ASSOC);
 }
 
 function handle_enter_team_button($data, $chat_id, $user_id, $conn, $config, $callback) {
