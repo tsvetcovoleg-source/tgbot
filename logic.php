@@ -176,24 +176,12 @@ function handle_games_command($chat_id, $user_id, $conn, $config) {
 }
 
 function handle_game_formats_info($chat_id, $user_id, $conn, $config) {
-    $botUsername = get_bot_username($config);
-    if ($botUsername === null) {
+    $message = build_format_info_message($config);
+
+    if ($message === null) {
         send_reply($config, $chat_id, 'Не удалось сформировать ссылку. Попробуйте позже или отправьте команду /игры.', null, $user_id, $conn);
         return null;
     }
-    $quizLink = sprintf('https://t.me/%s?start=quiz', rawurlencode($botUsername));
-    $detectiveLink = sprintf('https://t.me/%s?start=detective', rawurlencode($botUsername));
-    $questLink = sprintf('https://t.me/%s?start=quest', rawurlencode($botUsername));
-
-    $message = "✨ Паб-квиз\n" .
-        "Паб-квиз — это командная интеллектуальная игра MindGames с вопросами на логику, эрудицию и весёлые ассоциации. Настоящая классика наших мероприятий!\n" .
-        '<a href="' . htmlspecialchars($quizLink, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '">👉 Узнать, когда ближайшие игры паб-квиза</a>' .
-        "\n\n🕵️‍♂️ Saint Twins Detective\n" .
-        "Saint Twins Detective — это детективная игра-расследование с погружением в сюжет, уликами, версиями и неожиданными поворотами. Отлично подходит тем, кто любит загадки и атмосферу детектива.\n" .
-        '<a href="' . htmlspecialchars($detectiveLink, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '">👉 Узнать, когда ближайшая детективная игра</a>' .
-        "\n\n🚗 Квест на автомобилях\n" .
-        "Авто-квест — это динамичная городская игра MindGames, где вы разгадываете загадки, ищете точки по городу и проходите задания в реальном времени. Много драйва, движения и эмоций!\n" .
-        '<a href="' . htmlspecialchars($questLink, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '">👉 Узнать, когда ближайший авто-квест</a>';
 
     send_reply($config, $chat_id, $message, null, $user_id, $conn);
 
@@ -248,12 +236,69 @@ function handle_games_by_types($chat_id, $user_id, $conn, $config, array $types,
         return null;
     }
 
-    $text = $title . "\n\n" . build_games_message($games, $config);
+    $textPrefix = build_game_format_intro($types, $config);
+    $text = $textPrefix . $title . "\n\n" . build_games_message($games, $config);
 
     send_telegram($config, $chat_id, $text, null, 'HTML');
     log_bot_message($user_id, strip_tags($text), $conn);
 
     return null;
+}
+
+function build_game_format_intro(array $types, array $config): string
+{
+    $primaryFormat = resolve_primary_format($types);
+    if ($primaryFormat === null) {
+        return '';
+    }
+
+    $message = build_format_info_message($config, [$primaryFormat]);
+
+    if ($message === null) {
+        return '';
+    }
+
+    return $message . "\n\n";
+}
+
+function build_format_info_message(array $config, array $onlyFormats = null): ?string
+{
+    $definitions = get_game_format_definitions();
+
+    if ($onlyFormats !== null) {
+        $definitions = array_filter(
+            $definitions,
+            function ($key) use ($onlyFormats) {
+                return in_array($key, $onlyFormats, true);
+            },
+            ARRAY_FILTER_USE_KEY
+        );
+    }
+
+    if (!$definitions) {
+        return '';
+    }
+
+    $botUsername = get_bot_username($config);
+    if ($botUsername === null) {
+        return null;
+    }
+
+    $messages = [];
+
+    foreach ($definitions as $definition) {
+        if (!isset($definition['start_payload'], $definition['title'], $definition['description'], $definition['link_text'])) {
+            continue;
+        }
+
+        $link = sprintf('https://t.me/%s?start=%s', rawurlencode($botUsername), rawurlencode($definition['start_payload']));
+
+        $messages[] = $definition['title'] . "\n" .
+            $definition['description'] . "\n" .
+            '<a href="' . htmlspecialchars($link, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '">' . htmlspecialchars($definition['link_text'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '</a>';
+    }
+
+    return implode("\n\n", $messages);
 }
 
 function handle_text_registration_request($gameTitle, $chat_id, $user_id, $conn, $config) {
