@@ -115,6 +115,10 @@ function handle_callback($data, $user_id, $chat_id, $config, $conn, $callback) {
         return handle_register_button($data, $chat_id, $user_id, $conn, $config, $callback, null);
     }
 
+    if (strpos($data, 'select_team_') === 0) {
+        return handle_select_team_callback($data, $chat_id, $user_id, $conn, $config);
+    }
+
     if (strpos($data, 'enter_team_') === 0) {
         return handle_enter_team_button($data, $chat_id, $user_id, $conn, $config, $callback);
     }
@@ -378,6 +382,46 @@ function handle_enter_team_button($data, $chat_id, $user_id, $conn, $config, $ca
     log_bot_message($user_id, strip_tags($text), $conn);
 }
 
+function handle_select_team_callback($data, $chat_id, $user_id, $conn, $config) {
+    update_user_status($conn, $user_id, 1);
+
+    $encodedTeam = (string) str_replace('select_team_', '', $data);
+    $teamName = trim(urldecode($encodedTeam));
+
+    if ($teamName === '') {
+        return null;
+    }
+
+    $stmt = $conn->prepare("
+        SELECT id, quantity, game_id
+        FROM registrations
+        WHERE user_id = :uid
+          AND (team IS NULL OR team = '')
+          AND quantity IS NULL
+        ORDER BY id DESC
+        LIMIT 1
+    ");
+    $stmt->execute([':uid' => $user_id]);
+    $registration = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    if (!$registration) {
+        return null;
+    }
+
+    $stmtUp = $conn->prepare("UPDATE registrations SET team = :team WHERE id = :rid");
+    $stmtUp->execute([
+        ':team' => $teamName,
+        ':rid'  => $registration['id']
+    ]);
+
+    $askQuantity = "Отлично! Теперь выберите, сколько человек будет в вашей команде 👇";
+    $keyboard = build_quantity_keyboard();
+    send_telegram($config, $chat_id, $askQuantity, $keyboard, 'HTML');
+    log_bot_message($user_id, strip_tags($askQuantity), $conn);
+
+    return null;
+}
+
 
 
 function handle_free_text($text, $chat_id, $user_id, $conn, $config) {
@@ -562,14 +606,15 @@ function build_team_suggestions_keyboard($conn, $user_id) {
 
     foreach ($suggestions as $teamName) {
         $keyboardButtons[] = [
-            ['text' => $teamName]
+            [
+                'text' => $teamName,
+                'callback_data' => 'select_team_' . rawurlencode($teamName)
+            ]
         ];
     }
 
     return [
-        'keyboard' => $keyboardButtons,
-        'resize_keyboard' => true,
-        'one_time_keyboard' => true
+        'inline_keyboard' => $keyboardButtons
     ];
 }
 
