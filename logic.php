@@ -318,6 +318,8 @@ function send_registration_confirmation($game_id, $chat_id, $user_id, $conn, $co
 }
 
 function prepare_registration_for_team_entry($conn, $user_id, $game_id) {
+    ensure_multiple_registrations_allowed($conn);
+
     $stmtInsert = $conn->prepare("
         INSERT INTO registrations (user_id, game_id, created_at)
         VALUES (:uid, :gid, NOW())
@@ -326,6 +328,39 @@ function prepare_registration_for_team_entry($conn, $user_id, $game_id) {
         ':uid' => $user_id,
         ':gid' => $game_id
     ]);
+}
+
+function ensure_multiple_registrations_allowed($conn) {
+    $stmt = $conn->query("SHOW INDEX FROM registrations");
+    $indexes = $stmt ? $stmt->fetchAll(PDO::FETCH_ASSOC) : [];
+
+    if (!$indexes) {
+        return;
+    }
+
+    $uniqueIndexes = [];
+    foreach ($indexes as $index) {
+        if (!isset($index['Key_name'])) {
+            continue;
+        }
+
+        if ((int) ($index['Non_unique'] ?? 1) === 0) {
+            $key = $index['Key_name'];
+            $uniqueIndexes[$key][] = $index['Column_name'] ?? '';
+        }
+    }
+
+    foreach ($uniqueIndexes as $keyName => $columns) {
+        $normalized = array_map(static function ($col) {
+            return mb_strtolower((string) $col);
+        }, $columns);
+        sort($normalized);
+
+        if ($normalized === ['game_id', 'user_id']) {
+            $safeKeyName = str_replace('`', '``', $keyName);
+            $conn->exec("ALTER TABLE registrations DROP INDEX `{$safeKeyName}`");
+        }
+    }
 }
 
 function handle_enter_team_button($data, $chat_id, $user_id, $conn, $config, $callback) {
