@@ -2,6 +2,7 @@
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/telegram.php';
+require_once __DIR__ . '/format_helpers.php';
 require_once __DIR__ . '/admin_auth.php';
 
 header('Content-Type: application/json; charset=utf-8');
@@ -218,6 +219,28 @@ if ($action === 'get_user_messages') {
             ];
         }, $stmt->fetchAll(PDO::FETCH_ASSOC)),
     ]);
+    exit;
+}
+
+if ($action === 'create_subscription') {
+    $userId = (int) ($_POST['user_id'] ?? 0);
+    $format = trim($_POST['format'] ?? '');
+
+    if ($userId <= 0 || $format === '') {
+        http_response_code(400);
+        echo json_encode(['error' => 'Укажите пользователя и формат']);
+        exit;
+    }
+
+    if (!in_array($format, get_known_game_formats(), true)) {
+        http_response_code(400);
+        echo json_encode(['error' => 'Неизвестный формат']);
+        exit;
+    }
+
+    save_format_subscription($conn, $userId, $format);
+
+    echo json_encode(['success' => true]);
     exit;
 }
 
