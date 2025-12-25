@@ -285,10 +285,19 @@ function build_format_info_message(array $config, array $onlyFormats = null): ?s
     }
 
     $messages = [];
+    $seenPayloads = [];
 
     foreach ($definitions as $definition) {
         if (!isset($definition['start_payload'], $definition['title'], $definition['description'], $definition['link_text'])) {
             continue;
+        }
+
+        if ($onlyFormats === null) {
+            $payload = $definition['start_payload'];
+            if (isset($seenPayloads[$payload])) {
+                continue;
+            }
+            $seenPayloads[$payload] = true;
         }
 
         $link = sprintf('https://t.me/%s?start=%s', rawurlencode($botUsername), rawurlencode($definition['start_payload']));
