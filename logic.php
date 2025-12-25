@@ -1,5 +1,7 @@
 <?php
 
+require_once __DIR__ . '/format_helpers.php';
+
 function handle_message($text, $user_id, $chat_id, $config, $conn, $callback = null, $telegramMessageId = null, $storedMessageId = null) {
     $original_text = trim($text);
     $text_lower = mb_strtolower($original_text);
@@ -122,6 +124,10 @@ function handle_callback($data, $user_id, $chat_id, $config, $conn, $callback) {
         return handle_quantity_selection($data, $chat_id, $user_id, $conn, $config, $callback);
     }
 
+    if (strpos($data, 'subscribe_format_') === 0) {
+        return handle_subscribe_format_button($data, $chat_id, $user_id, $conn, $config);
+    }
+
 
     // можно добавить другие...
 }
@@ -214,6 +220,24 @@ function handle_games_by_types($chat_id, $user_id, $conn, $config, array $types,
     $games = fetch_games($conn, $types);
 
     if (!$games) {
+        $primaryFormat = resolve_primary_format($types);
+        if ($primaryFormat !== null) {
+            $formatDisplay = get_format_display_name($primaryFormat);
+            $message = 'Упс. На данный момент у нас нет запланированных игр формата ' . $formatDisplay . '. ' .
+                'Хотите, чтобы мы уведомили вас сразу, как в расписании появится игра этого формата ' . $formatDisplay . '?';
+
+            $keyboard = [
+                'inline_keyboard' => [
+                    [
+                        ['text' => 'Да, хочу быть в курсе', 'callback_data' => 'subscribe_format_' . $primaryFormat]
+                    ]
+                ]
+            ];
+
+            send_reply($config, $chat_id, $message, $keyboard, $user_id, $conn);
+            return null;
+        }
+
         send_reply($config, $chat_id, $emptyMessage, null, $user_id, $conn);
         return null;
     }
@@ -589,8 +613,9 @@ function save_quantity_and_confirm($conn, $config, $chat_id, $user_id, $registra
 function fetch_games($conn, $type = null)
 {
     $query = "
-        SELECT id, game_number, game_date, start_time, location, price
+        SELECT id, game_number, game_date, start_time, location, price, type
         FROM games
+        WHERE (game_date > CURDATE() OR (game_date = CURDATE() AND start_time >= CURTIME()))
     ";
 
     $params = [];
@@ -605,20 +630,44 @@ function fetch_games($conn, $type = null)
             }
 
             if ($placeholders) {
-                $query .= ' WHERE type IN (' . implode(', ', $placeholders) . ')';
+                $query .= ' AND type IN (' . implode(', ', $placeholders) . ')';
             }
         } else {
-            $query .= " WHERE type = :type";
+            $query .= " AND type = :type";
             $params[':type'] = $type;
         }
     }
 
-    $query .= " ORDER BY game_date ASC";
+    $query .= " ORDER BY game_date ASC, start_time ASC, id ASC";
 
     $stmt = $conn->prepare($query);
     $stmt->execute($params);
 
     return $stmt->fetchAll(PDO::FETCH_ASSOC);
+}
+
+function handle_subscribe_format_button($data, $chat_id, $user_id, $conn, $config)
+{
+    $format = str_replace('subscribe_format_', '', $data);
+
+    if (!$user_id) {
+        send_reply($config, $chat_id, 'Не удалось определить пользователя для подписки на уведомления.', null, $user_id, $conn);
+        return null;
+    }
+
+    $knownFormats = get_known_game_formats();
+    if (!in_array($format, $knownFormats, true)) {
+        send_reply($config, $chat_id, 'Неизвестный формат игры. Попробуйте позже.', null, $user_id, $conn);
+        return null;
+    }
+
+    save_format_subscription($conn, $user_id, $format);
+
+    $formatDisplay = get_format_display_name($format);
+    $message = 'Мы уведомим вас, как только появятся новые игры формата ' . $formatDisplay . '. Спасибо!';
+    send_reply($config, $chat_id, $message, null, $user_id, $conn);
+
+    return null;
 }
 
 function build_games_message(array $games, array $config)

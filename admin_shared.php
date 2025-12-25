@@ -107,6 +107,7 @@ function render_admin_layout_start(string $title, string $activeNav, string $hea
             <nav class="nav">
                 <a class="nav-link <?php echo $activeNav === 'games' ? 'active' : ''; ?>" href="admin_games.php">Игры</a>
                 <a class="nav-link <?php echo $activeNav === 'dialogues' ? 'active' : ''; ?>" href="admin_dialogues.php">Диалоги</a>
+                <a class="nav-link <?php echo $activeNav === 'subscriptions' ? 'active' : ''; ?>" href="admin_subscriptions.php">Уведомления</a>
                 <a class="nav-link <?php echo $activeNav === 'create' ? 'active' : ''; ?>" href="admin_create_game.php">Создать игру</a>
             </nav>
             <div class="nav-actions">
