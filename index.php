@@ -1,0 +1,11 @@
+<?php
+// Пустая стартовая страница, чтобы не показывать список файлов.
+?><!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title></title>
+</head>
+<body>
+</body>
+</html>

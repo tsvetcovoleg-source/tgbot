@@ -4,14 +4,14 @@ require_once __DIR__ . '/format_helpers.php';
 
 [$conn, $config] = bootstrap_admin();
 
-$gamesStmt = $conn->query('SELECT id, game_number, game_date, start_time, location, price, type, status FROM games WHERE status != 3 ORDER BY game_date DESC, id DESC');
+$gamesStmt = $conn->query('SELECT id, game_number, game_date, start_time, location, price, type, status FROM games WHERE status = 3 ORDER BY game_date DESC, id DESC');
 $games = $gamesStmt->fetchAll(PDO::FETCH_ASSOC);
 
-render_admin_layout_start('Игры — Админка', 'games', 'Игры');
+render_admin_layout_start('Архив игр — Админка', 'games-archive', 'Архив игр');
 ?>
     <div class="card">
         <div class="section-header">
-            <h2>Список игр</h2>
+            <h2>Архив игр</h2>
             <a class="link" href="admin_create_game.php">Создать новую игру</a>
         </div>
         <div class="table-wrapper">
@@ -56,7 +56,7 @@ render_admin_layout_start('Игры — Админка', 'games', 'Игры');
             </table>
         </div>
         <?php if (!$games): ?>
-            <p class="muted" id="games-empty">Пока нет созданных игр.</p>
+            <p class="muted" id="games-empty">Архив пока пуст.</p>
         <?php endif; ?>
     </div>
 <?php render_admin_layout_end(); ?>
