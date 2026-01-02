@@ -35,7 +35,7 @@ if (!$game) {
 }
 
 $regsStmt = $conn->prepare('
-    SELECT r.id, r.team, r.quantity, r.created_at, r.user_id, u.telegram_id, u.first_name, u.last_name, u.username
+    SELECT r.id, r.team, r.quantity, r.status, r.created_at, r.user_id, u.telegram_id, u.first_name, u.last_name, u.username
     FROM registrations r
     INNER JOIN users u ON r.user_id = u.id
     WHERE r.game_id = :gid
@@ -53,6 +53,7 @@ $registrations = array_map(static function ($row) {
         'id' => (int) $row['id'],
         'team' => $row['team'],
         'quantity' => $row['quantity'] ?? null,
+        'status' => isset($row['status']) ? (int) $row['status'] : 1,
         'created_at' => $row['created_at'],
         'user_id' => (int) $row['user_id'],
         'user_label' => $label,
@@ -74,6 +75,89 @@ render_admin_layout_start('Детали игры — Админка', 'games', '
             <div class="meta-item"><strong>Время:</strong> <span id="meta-time"><?php echo htmlspecialchars($game['start_time']); ?></span></div>
             <div class="meta-item"><strong>Статус:</strong> <span class="badge status-<?php echo (int) ($game['status'] ?? 1); ?>" id="meta-status"><?php echo htmlspecialchars($statusDetails['label'] ?? ''); ?></span></div>
         </div>
+    </div>
+
+    <style>
+        .registrations-table .reg-view { display: block; }
+        .registrations-table .reg-edit { display: none; width: 100%; }
+        .registrations-table .edit-actions { display: none; gap: 6px; flex-wrap: wrap; }
+        .registrations-table .view-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+        .registrations-table .registration-row.editing .reg-view { display: none; }
+        .registrations-table .registration-row.editing .reg-edit { display: block; }
+        .registrations-table .registration-row.editing .edit-actions { display: flex; }
+        .registrations-table .registration-row.editing .view-actions { display: none; }
+        .registrations-table .status-cell { white-space: nowrap; }
+        .registrations-table .actions-cell { min-width: 220px; }
+    </style>
+
+    <div class="card">
+        <div class="section-header">
+            <h3>Регистрации</h3>
+            <p class="muted-small">Данные отображаются в виде текста для копирования. Редактирование появляется только по кнопке.</p>
+        </div>
+        <?php if (!$registrations): ?>
+            <p class="muted" id="registrations-empty">Нет регистраций на эту игру.</p>
+        <?php else: ?>
+            <div class="table-wrapper">
+                <table id="registrations-table" class="registrations-table">
+                    <thead>
+                    <tr>
+                        <th>Команда</th>
+                        <th>Количество</th>
+                        <th>Статус</th>
+                        <th>Пользователь</th>
+                        <th>Telegram</th>
+                        <th>Создано</th>
+                        <th></th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    <?php foreach ($registrations as $reg): ?>
+                        <?php
+                            $statusValue = (int) ($reg['status'] ?? 1);
+                            $statusLabel = get_game_status_label($statusValue);
+                            $teamRaw = $reg['team'] ?? '';
+                            $teamDisplay = trim($teamRaw) !== '' ? $teamRaw : 'Без названия';
+                            $quantityRaw = $reg['quantity'] ?? '';
+                            $quantityDisplay = trim((string) $quantityRaw) !== '' ? $quantityRaw : '—';
+                        ?>
+                        <tr class="registration-row" data-registration-id="<?php echo (int) $reg['id']; ?>" data-team="<?php echo htmlspecialchars($teamRaw ?? '', ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); ?>" data-quantity="<?php echo htmlspecialchars($quantityRaw ?? '', ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); ?>" data-registration-status="<?php echo $statusValue; ?>">
+                            <td>
+                                <div class="reg-view team-view"><?php echo htmlspecialchars($teamDisplay); ?></div>
+                                <input type="text" class="reg-edit reg-team" value="<?php echo htmlspecialchars($teamRaw ?? ''); ?>" placeholder="Без названия">
+                            </td>
+                            <td>
+                                <div class="reg-view quantity-view"><?php echo htmlspecialchars($quantityDisplay); ?></div>
+                                <input type="text" class="reg-edit reg-quantity" value="<?php echo htmlspecialchars($quantityRaw ?? ''); ?>" placeholder="—">
+                            </td>
+                            <td class="status-cell">
+                                <span class="badge status-<?php echo $statusValue; ?> status-badge"><?php echo htmlspecialchars($statusLabel); ?></span>
+                            </td>
+                            <td><?php echo htmlspecialchars($reg['user_label'] ?? ''); ?></td>
+                            <td>
+                                <div><?php echo htmlspecialchars($reg['telegram_id'] ?? ''); ?></div>
+                                <a class="link" href="admin_dialogues.php?user_id=<?php echo (int) $reg['user_id']; ?>">Открыть диалог</a>
+                            </td>
+                            <td><?php echo htmlspecialchars($reg['created_at']); ?></td>
+                            <td class="actions-cell">
+                                <div class="view-actions">
+                                    <button type="button" class="outline-btn edit-registration">Редактировать</button>
+                                    <?php if ($statusValue === 2): ?>
+                                        <button type="button" class="outline-btn confirm-reserve">Подтвердить резерв</button>
+                                    <?php endif; ?>
+                                </div>
+                                <div class="edit-actions">
+                                    <button type="button" class="outline-btn save-registration">Сохранить</button>
+                                    <button type="button" class="ghost-btn cancel-edit">Отменить</button>
+                                </div>
+                                <div class="muted-small row-status"></div>
+                            </td>
+                        </tr>
+                    <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+        <?php endif; ?>
     </div>
 
     <div class="card">
@@ -119,53 +203,6 @@ render_admin_layout_start('Детали игры — Админка', 'games', '
         </div>
     </div>
 
-    <div class="card">
-        <div class="section-header">
-            <h3>Регистрации</h3>
-            <p class="muted-small">Все данные собраны в таблице, значения можно редактировать и сохранять.</p>
-        </div>
-        <?php if (!$registrations): ?>
-            <p class="muted" id="registrations-empty">Нет регистраций на эту игру.</p>
-        <?php else: ?>
-            <div class="table-wrapper">
-                <table id="registrations-table">
-                    <thead>
-                    <tr>
-                        <th>Команда</th>
-                        <th>Количество</th>
-                        <th>Пользователь</th>
-                        <th>Telegram</th>
-                        <th>Создано</th>
-                        <th></th>
-                    </tr>
-                    </thead>
-                    <tbody>
-                    <?php foreach ($registrations as $reg): ?>
-                        <tr data-registration-id="<?php echo (int) $reg['id']; ?>">
-                            <td>
-                                <input type="text" class="reg-team" value="<?php echo htmlspecialchars($reg['team'] ?? ''); ?>" placeholder="Без названия">
-                            </td>
-                            <td>
-                                <input type="text" class="reg-quantity" value="<?php echo htmlspecialchars($reg['quantity'] ?? ''); ?>" placeholder="—">
-                            </td>
-                            <td><?php echo htmlspecialchars($reg['user_label'] ?? ''); ?></td>
-                            <td>
-                                <div><?php echo htmlspecialchars($reg['telegram_id'] ?? ''); ?></div>
-                                <a class="link" href="admin_dialogues.php?user_id=<?php echo (int) $reg['user_id']; ?>">Открыть диалог</a>
-                            </td>
-                            <td><?php echo htmlspecialchars($reg['created_at']); ?></td>
-                            <td>
-                                <button type="button" class="outline-btn save-registration">Сохранить</button>
-                                <div class="muted-small row-status"></div>
-                            </td>
-                        </tr>
-                    <?php endforeach; ?>
-                    </tbody>
-                </table>
-            </div>
-        <?php endif; ?>
-    </div>
-
     <script>
     const gameData = <?php echo json_encode($game, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES); ?>;
     let registrations = <?php echo json_encode($registrations, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES); ?>;
@@ -173,7 +210,7 @@ render_admin_layout_start('Детали игры — Админка', 'games', '
     function getStatusLabel(status) {
         switch (Number(status)) {
             case 2:
-                return 'Только резерв';
+                return 'Резерв';
             case 3:
                 return 'Регистрация закрыта';
             default:
@@ -217,6 +254,63 @@ render_admin_layout_start('Детали игры — Админка', 'games', '
         }
     }
 
+    function setRowMode(row, mode) {
+        if (!row) return;
+        row.classList.toggle('editing', mode === 'edit');
+        row.dataset.mode = mode;
+    }
+
+    function resetRowInputs(row) {
+        if (!row) return;
+        const teamInput = row.querySelector('.reg-team');
+        const quantityInput = row.querySelector('.reg-quantity');
+
+        if (teamInput) teamInput.value = row.dataset.team || '';
+        if (quantityInput) quantityInput.value = row.dataset.quantity || '';
+    }
+
+    function updateRegistrationView(row, data) {
+        if (!row || !data) return;
+
+        if (Object.prototype.hasOwnProperty.call(data, 'team')) {
+            row.dataset.team = data.team || '';
+            const teamView = row.querySelector('.team-view');
+            if (teamView) {
+                teamView.textContent = data.team && data.team.trim() !== '' ? data.team : 'Без названия';
+            }
+        }
+
+        if (Object.prototype.hasOwnProperty.call(data, 'quantity')) {
+            row.dataset.quantity = data.quantity ?? '';
+            const quantityView = row.querySelector('.quantity-view');
+            if (quantityView) {
+                const value = data.quantity;
+                quantityView.textContent = value && String(value).trim() !== '' ? value : '—';
+            }
+        }
+
+        if (Object.prototype.hasOwnProperty.call(data, 'status')) {
+            row.dataset.registrationStatus = Number(data.status);
+            const badge = row.querySelector('.status-badge');
+            if (badge) {
+                badge.textContent = getStatusLabel(data.status);
+                badge.className = `badge status-${data.status} status-badge`;
+            }
+
+            const confirmBtn = row.querySelector('.confirm-reserve');
+            if (confirmBtn && Number(data.status) !== 2) {
+                confirmBtn.remove();
+            }
+        }
+    }
+
+    function updateRegistrationsState(regId, updates) {
+        const regIndex = registrations.findIndex(r => Number(r.id) === regId);
+        if (regIndex !== -1) {
+            registrations[regIndex] = { ...registrations[regIndex], ...updates };
+        }
+    }
+
     const gameEditForm = document.getElementById('game-edit-form');
     if (gameEditForm) {
         gameEditForm.addEventListener('submit', (e) => {
@@ -253,41 +347,81 @@ render_admin_layout_start('Детали игры — Админка', 'games', '
     const registrationsTable = document.getElementById('registrations-table');
     if (registrationsTable) {
         registrationsTable.addEventListener('click', (event) => {
-            const btn = event.target.closest('.save-registration');
-            if (!btn) return;
-            const row = btn.closest('tr');
-            const regId = row ? Number(row.dataset.registrationId || 0) : 0;
-            if (!row || !regId) return;
+            const row = event.target.closest('tr[data-registration-id]');
+            if (!row) return;
 
-            const teamInput = row.querySelector('.reg-team');
-            const quantityInput = row.querySelector('.reg-quantity');
+            const regId = Number(row.dataset.registrationId || 0);
+            if (!regId) return;
 
-            const formData = new FormData();
-            formData.append('action', 'update_registration');
-            formData.append('registration_id', regId);
-            formData.append('team', teamInput ? teamInput.value : '');
-            formData.append('quantity', quantityInput ? quantityInput.value : '');
+            if (event.target.closest('.edit-registration')) {
+                resetRowInputs(row);
+                setRowMode(row, 'edit');
+                showRowStatus(row, '');
+                return;
+            }
 
-            showRowStatus(row, 'Сохраняем...');
+            if (event.target.closest('.cancel-edit')) {
+                resetRowInputs(row);
+                setRowMode(row, 'view');
+                showRowStatus(row, '');
+                return;
+            }
 
-            fetch('admin_actions.php', {
-                method: 'POST',
-                body: formData,
-            }).then(async (res) => {
-                const data = await res.json();
-                if (res.ok && data.success) {
-                    showRowStatus(row, 'Сохранено');
-                    const regIndex = registrations.findIndex(r => Number(r.id) === regId);
-                    if (regIndex !== -1) {
-                        registrations[regIndex].team = data.registration.team;
-                        registrations[regIndex].quantity = data.registration.quantity;
+            if (event.target.closest('.save-registration')) {
+                const teamInput = row.querySelector('.reg-team');
+                const quantityInput = row.querySelector('.reg-quantity');
+
+                const formData = new FormData();
+                formData.append('action', 'update_registration');
+                formData.append('registration_id', regId);
+                formData.append('team', teamInput ? teamInput.value : '');
+                formData.append('quantity', quantityInput ? quantityInput.value : '');
+
+                showRowStatus(row, 'Сохраняем...');
+
+                fetch('admin_actions.php', {
+                    method: 'POST',
+                    body: formData,
+                }).then(async (res) => {
+                    const data = await res.json();
+                    if (res.ok && data.success) {
+                        showRowStatus(row, 'Сохранено');
+                        updateRegistrationView(row, data.registration);
+                        updateRegistrationsState(regId, data.registration);
+                        setRowMode(row, 'view');
+                    } else {
+                        showRowStatus(row, data.error || 'Не удалось сохранить', true);
                     }
-                } else {
-                    showRowStatus(row, data.error || 'Не удалось сохранить', true);
-                }
-            }).catch(() => {
-                showRowStatus(row, 'Ошибка сети при сохранении', true);
-            });
+                }).catch(() => {
+                    showRowStatus(row, 'Ошибка сети при сохранении', true);
+                });
+                return;
+            }
+
+            if (event.target.closest('.confirm-reserve')) {
+                const formData = new FormData();
+                formData.append('action', 'confirm_reserve');
+                formData.append('registration_id', regId);
+
+                showRowStatus(row, 'Отправляем подтверждение...');
+
+                fetch('admin_actions.php', {
+                    method: 'POST',
+                    body: formData,
+                }).then(async (res) => {
+                    const data = await res.json();
+                    if (res.ok && data.success) {
+                        showRowStatus(row, 'Резерв подтверждён, сообщение отправлено');
+                        updateRegistrationView(row, data.registration);
+                        updateRegistrationsState(regId, data.registration);
+                        setRowMode(row, 'view');
+                    } else {
+                        showRowStatus(row, data.error || 'Не удалось подтвердить резерв', true);
+                    }
+                }).catch(() => {
+                    showRowStatus(row, 'Ошибка сети при подтверждении', true);
+                });
+            }
         });
     }
 
