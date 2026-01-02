@@ -223,6 +223,45 @@ if ($action === 'send_message') {
     exit;
 }
 
+if ($action === 'update_registration') {
+    $registrationId = (int) ($_POST['registration_id'] ?? 0);
+    $team = trim($_POST['team'] ?? '');
+    $quantity = trim($_POST['quantity'] ?? '');
+
+    if ($registrationId <= 0) {
+        http_response_code(400);
+        echo json_encode(['error' => 'Некорректный идентификатор регистрации']);
+        exit;
+    }
+
+    $stmt = $conn->prepare('SELECT id FROM registrations WHERE id = :id LIMIT 1');
+    $stmt->execute([':id' => $registrationId]);
+    if (!$stmt->fetchColumn()) {
+        http_response_code(404);
+        echo json_encode(['error' => 'Регистрация не найдена']);
+        exit;
+    }
+
+    $quantityValue = $quantity !== '' ? $quantity : null;
+
+    $updateStmt = $conn->prepare('UPDATE registrations SET team = :team, quantity = :quantity WHERE id = :id');
+    $updateStmt->execute([
+        ':team' => $team,
+        ':quantity' => $quantityValue,
+        ':id' => $registrationId,
+    ]);
+
+    echo json_encode([
+        'success' => true,
+        'registration' => [
+            'id' => $registrationId,
+            'team' => $team,
+            'quantity' => $quantityValue,
+        ],
+    ]);
+    exit;
+}
+
 if ($action === 'get_user_messages') {
     $userId = (int) ($_POST['user_id'] ?? 0);
 
