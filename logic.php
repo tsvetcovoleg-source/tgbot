@@ -363,7 +363,7 @@ function send_registration_confirmation($game_id, $chat_id, $user_id, $conn, $co
             return;
         }
 
-        prepare_registration_for_team_entry($conn, $user_id, $game_id, $existingRegistration);
+        prepare_registration_for_team_entry($conn, $user_id, $game_id, $existingRegistration, $game);
 
         $formattedDateTime = format_game_datetime($game['game_date'], $game['start_time']);
         $formattedDateTimeEscaped = htmlspecialchars(
@@ -402,9 +402,24 @@ function send_registration_confirmation($game_id, $chat_id, $user_id, $conn, $co
     log_bot_message($user_id, strip_tags($msg), $conn);
 }
 
-function prepare_registration_for_team_entry($conn, $user_id, $game_id, $existingRegistration = null) {
+function prepare_registration_for_team_entry($conn, $user_id, $game_id, $existingRegistration = null, $game = null) {
     if ($existingRegistration === null) {
         $existingRegistration = fetch_latest_registration($conn, $user_id, $game_id);
+    }
+
+    $gameStatus = null;
+
+    if ($game !== null && isset($game['status'])) {
+        $gameStatus = (int) $game['status'];
+    } else {
+        $gameData = fetch_game_by_id($conn, $game_id);
+        if ($gameData !== null && isset($gameData['status'])) {
+            $gameStatus = (int) $gameData['status'];
+        }
+    }
+
+    if ($gameStatus === null) {
+        $gameStatus = 1;
     }
 
     if ($existingRegistration) {
@@ -412,25 +427,29 @@ function prepare_registration_for_team_entry($conn, $user_id, $game_id, $existin
             return;
         }
 
-        $stmtReset = $conn->prepare("UPDATE registrations SET team = NULL, quantity = NULL WHERE id = :rid");
-        $stmtReset->execute([':rid' => $existingRegistration['id']]);
+        $stmtReset = $conn->prepare("UPDATE registrations SET team = NULL, quantity = NULL, status = :status WHERE id = :rid");
+        $stmtReset->execute([
+            ':status' => $gameStatus,
+            ':rid' => $existingRegistration['id']
+        ]);
         return;
     }
 
     $stmtInsert = $conn->prepare("
-        INSERT INTO registrations (user_id, game_id, created_at)
-        VALUES (:uid, :gid, NOW())
+        INSERT INTO registrations (user_id, game_id, status, created_at)
+        VALUES (:uid, :gid, :status, NOW())
     ");
     $stmtInsert->execute([
         ':uid' => $user_id,
-        ':gid' => $game_id
+        ':gid' => $game_id,
+        ':status' => $gameStatus
     ]);
 }
 
 function fetch_latest_registration($conn, $user_id, $game_id)
 {
     $stmt = $conn->prepare("
-        SELECT id, team, quantity
+        SELECT id, team, quantity, status, game_id
         FROM registrations
         WHERE user_id = :uid AND game_id = :gid
         ORDER BY id DESC
@@ -450,7 +469,8 @@ function handle_enter_team_button($data, $chat_id, $user_id, $conn, $config, $ca
     // Получаем game_id из callback_data: enter_team_{id}
     $game_id = (int) str_replace('enter_team_', '', $data);
 
-    prepare_registration_for_team_entry($conn, $user_id, $game_id);
+    $game = fetch_game_by_id($conn, $game_id);
+    prepare_registration_for_team_entry($conn, $user_id, $game_id, null, $game);
 
     // Сообщение-подсказка
     $text = "📝 В ответе на это сообщение введите <b>название вашей команды</b>.";
