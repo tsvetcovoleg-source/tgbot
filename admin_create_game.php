@@ -35,6 +35,13 @@ render_admin_layout_start('Создать игру — Админка', 'create'
                 <option value="quest">quest</option>
             </select>
 
+            <label for="status">Статус регистрации</label>
+            <select id="status" name="status" required>
+                <option value="1">Есть места</option>
+                <option value="2">Только резерв</option>
+                <option value="3">Регистрация закрыта</option>
+            </select>
+
             <button type="submit">Создать игру</button>
             <p id="game-status"></p>
         </form>

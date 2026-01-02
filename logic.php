@@ -355,6 +355,14 @@ function send_registration_confirmation($game_id, $chat_id, $user_id, $conn, $co
     $teamSuggestionsKeyboard = null;
 
     if ($game) {
+        $gameStatus = (int) ($game['status'] ?? 1);
+
+        if ($gameStatus === 3) {
+            $message = '❌ Регистрация на эту игру закрыта. Пожалуйста, выберите другую игру из списка.';
+            send_reply($config, $chat_id, $message, null, $user_id, $conn);
+            return;
+        }
+
         prepare_registration_for_team_entry($conn, $user_id, $game_id, $existingRegistration);
 
         $formattedDateTime = format_game_datetime($game['game_date'], $game['start_time']);
@@ -364,7 +372,11 @@ function send_registration_confirmation($game_id, $chat_id, $user_id, $conn, $co
             'UTF-8'
         );
 
-        $teamPrompt = "Готовы присоединиться к игре? Тогда просто введите название в ответ на это сообщение либо выберите название команды из списка ниже.";
+        $statusDetails = get_game_status_details($gameStatus);
+        $statusNotice = isset($statusDetails['description']) ? $statusDetails['description'] : '';
+
+        $teamPrompt = ($statusNotice !== '' ? $statusNotice . "\n\n" : '') .
+            "Готовы присоединиться к игре? Тогда просто введите название в ответ на это сообщение либо выберите название команды из списка ниже.";
 
         $teamSuggestionsKeyboard = build_team_suggestions_keyboard($conn, $user_id);
 
@@ -807,9 +819,10 @@ function save_quantity_and_confirm($conn, $config, $chat_id, $user_id, $registra
 function fetch_games($conn, $type = null)
 {
     $query = "
-        SELECT id, game_number, game_date, start_time, location, price, type
+        SELECT id, game_number, game_date, start_time, location, price, type, status
         FROM games
         WHERE (game_date > CURDATE() OR (game_date = CURDATE() AND start_time >= CURTIME()))
+          AND status <> 3
     ";
 
     $params = [];
@@ -874,6 +887,11 @@ function build_games_message(array $games, array $config)
         $gameNumberEscaped = htmlspecialchars($game['game_number'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
         $locationEscaped = htmlspecialchars($game['location'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
         $priceEscaped = htmlspecialchars($game['price'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+        $statusDescription = htmlspecialchars(
+            get_game_status_description((int) ($game['status'] ?? 1)),
+            ENT_QUOTES | ENT_SUBSTITUTE,
+            'UTF-8'
+        );
 
         $formattedDateTime = format_game_datetime($game['game_date'], $game['start_time']);
         $formattedDateTimeEscaped = htmlspecialchars(
@@ -895,7 +913,8 @@ function build_games_message(array $games, array $config)
         $messageText = "🎮 {$gameNumberEscaped}\n" .
             "📅 {$formattedDateTimeEscaped}\n" .
             "📍 {$locationEscaped}\n" .
-            "💰 {$priceEscaped}\n\n";
+            "💰 {$priceEscaped}\n" .
+            "{$statusDescription}\n\n";
 
         if ($shareLink !== null) {
             $messageText .= '<a href="' . htmlspecialchars($shareLink, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '">✉️ Зарегистрироваться на игру</a>';
@@ -958,7 +977,7 @@ function format_game_datetime(string $date, string $time)
 function fetch_game_by_id($conn, $game_id)
 {
     $stmt = $conn->prepare("
-        SELECT id, game_number, game_date, start_time, location, price
+        SELECT id, game_number, game_date, start_time, location, price, status
         FROM games
         WHERE id = :id
         LIMIT 1

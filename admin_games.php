@@ -1,9 +1,10 @@
 <?php
 require_once __DIR__ . '/admin_shared.php';
+require_once __DIR__ . '/format_helpers.php';
 
 [$conn, $config] = bootstrap_admin();
 
-$gamesStmt = $conn->query('SELECT id, game_number, game_date, start_time, location, price, type FROM games ORDER BY game_date DESC, id DESC');
+$gamesStmt = $conn->query('SELECT id, game_number, game_date, start_time, location, price, type, status FROM games ORDER BY game_date DESC, id DESC');
 $games = $gamesStmt->fetchAll(PDO::FETCH_ASSOC);
 
 render_admin_layout_start('Игры — Админка', 'games', 'Игры');
@@ -24,19 +25,26 @@ render_admin_layout_start('Игры — Админка', 'games', 'Игры');
                     <th>Локация</th>
                     <th>Стоимость</th>
                     <th>Тип</th>
+                    <th>Статус</th>
                     <th></th>
                 </tr>
                 </thead>
                 <tbody>
                 <?php foreach ($games as $game): ?>
                     <tr data-game-id="<?php echo (int) $game['id']; ?>">
-                        <td><?php echo (int) $game['id']; ?></td>
-                        <td><?php echo htmlspecialchars($game['game_number']); ?></td>
-                        <td><?php echo htmlspecialchars($game['game_date']); ?></td>
-                        <td><?php echo htmlspecialchars($game['start_time']); ?></td>
-                        <td><?php echo htmlspecialchars($game['location']); ?></td>
-                        <td><?php echo htmlspecialchars($game['price']); ?></td>
-                        <td><span class="badge"><?php echo htmlspecialchars($game['type'] ?: 'unknown'); ?></span></td>
+                        <td class="cell-id"><?php echo (int) $game['id']; ?></td>
+                        <td class="cell-number"><?php echo htmlspecialchars($game['game_number']); ?></td>
+                        <td class="cell-date"><?php echo htmlspecialchars($game['game_date']); ?></td>
+                        <td class="cell-time"><?php echo htmlspecialchars($game['start_time']); ?></td>
+                        <td class="cell-location"><?php echo htmlspecialchars($game['location']); ?></td>
+                        <td class="cell-price"><?php echo htmlspecialchars($game['price']); ?></td>
+                        <td class="cell-type"><span class="badge"><?php echo htmlspecialchars($game['type'] ?: 'unknown'); ?></span></td>
+                        <?php $statusDetails = get_game_status_details((int) ($game['status'] ?? 1)); ?>
+                        <td class="cell-status">
+                            <span class="badge status-<?php echo (int) ($game['status'] ?? 1); ?>">
+                                <?php echo htmlspecialchars($statusDetails['label'] ?? ''); ?>
+                            </span>
+                        </td>
                         <td>
                             <div class="table-actions">
                                 <button type="button" class="outline-btn view-game" data-game-id="<?php echo (int) $game['id']; ?>">Открыть</button>
@@ -86,6 +94,13 @@ render_admin_layout_start('Игры — Админка', 'games', 'Игры');
                         <option value="quest">quest</option>
                     </select>
 
+                    <label for="edit_status">Статус регистрации</label>
+                    <select id="edit_status" name="status" required>
+                        <option value="1">Есть места</option>
+                        <option value="2">Только резерв</option>
+                        <option value="3">Регистрация закрыта</option>
+                    </select>
+
                     <button type="submit">Сохранить изменения</button>
                     <p id="game-edit-status"></p>
                 </form>
@@ -107,6 +122,17 @@ render_admin_layout_start('Игры — Админка', 'games', 'Игры');
         const div = document.createElement('div');
         div.textContent = text;
         return div.innerHTML;
+    }
+
+    function getStatusLabel(status) {
+        switch (Number(status)) {
+            case 2:
+                return 'Резерв';
+            case 3:
+                return 'Закрыта';
+            default:
+                return 'Есть места';
+        }
     }
 
     function renderRegistrations(registrations) {
@@ -157,6 +183,7 @@ render_admin_layout_start('Игры — Админка', 'games', 'Игры');
         document.getElementById('edit_location').value = game.location;
         document.getElementById('edit_price').value = game.price;
         document.getElementById('edit_type').value = game.type || '';
+        document.getElementById('edit_status').value = game.status || '1';
 
         const status = document.getElementById('game-edit-status');
         if (status) {
@@ -196,15 +223,29 @@ render_admin_layout_start('Игры — Админка', 'games', 'Игры');
         const row = table.querySelector(`tr[data-game-id="${game.id}"]`);
         if (!row) return;
 
-        const cells = row.querySelectorAll('td');
-        if (cells.length >= 7) {
-            cells[1].textContent = game.game_number;
-            cells[2].textContent = game.game_date;
-            cells[3].textContent = game.start_time;
-            cells[4].textContent = game.location;
-            cells[5].textContent = game.price;
-            const badge = cells[6].querySelector('.badge');
-            if (badge) badge.textContent = game.type || 'unknown';
+        const numberCell = row.querySelector('.cell-number');
+        if (numberCell) numberCell.textContent = game.game_number;
+
+        const dateCell = row.querySelector('.cell-date');
+        if (dateCell) dateCell.textContent = game.game_date;
+
+        const timeCell = row.querySelector('.cell-time');
+        if (timeCell) timeCell.textContent = game.start_time;
+
+        const locationCell = row.querySelector('.cell-location');
+        if (locationCell) locationCell.textContent = game.location;
+
+        const priceCell = row.querySelector('.cell-price');
+        if (priceCell) priceCell.textContent = game.price;
+
+        const typeBadge = row.querySelector('.cell-type .badge');
+        if (typeBadge) typeBadge.textContent = game.type || 'unknown';
+
+        const statusBadge = row.querySelector('.cell-status .badge');
+        if (statusBadge) {
+            const statusValue = Number(game.status || 1);
+            statusBadge.textContent = getStatusLabel(statusValue);
+            statusBadge.className = `badge status-${statusValue}`;
         }
     }
 
