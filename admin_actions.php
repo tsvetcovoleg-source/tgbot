@@ -20,6 +20,7 @@ if ($action === 'create_game') {
     $location = trim($_POST['location'] ?? '');
     $price = trim($_POST['price'] ?? '');
     $type = trim($_POST['type'] ?? '');
+    $status = (int) ($_POST['status'] ?? 1);
 
     if ($gameNumber === '' || $gameDate === '' || $startTime === '' || $location === '' || $price === '' || $type === '') {
         http_response_code(400);
@@ -27,9 +28,15 @@ if ($action === 'create_game') {
         exit;
     }
 
+    if (!in_array($status, [1, 2, 3], true)) {
+        http_response_code(400);
+        echo json_encode(['error' => 'Некорректный статус игры']);
+        exit;
+    }
+
     $stmt = $conn->prepare('
-        INSERT INTO games (game_number, game_date, start_time, location, price, type)
-        VALUES (:number, :date, :time, :loc, :price, :type)
+        INSERT INTO games (game_number, game_date, start_time, location, price, type, status)
+        VALUES (:number, :date, :time, :loc, :price, :type, :status)
     ');
 
     $stmt->execute([
@@ -39,6 +46,7 @@ if ($action === 'create_game') {
         ':loc' => $location,
         ':price' => $price,
         ':type' => $type,
+        ':status' => $status,
     ]);
 
     echo json_encode(['success' => true, 'id' => (int) $conn->lastInsertId()]);
@@ -53,6 +61,7 @@ if ($action === 'update_game') {
     $location = trim($_POST['location'] ?? '');
     $price = trim($_POST['price'] ?? '');
     $type = trim($_POST['type'] ?? '');
+    $status = (int) ($_POST['status'] ?? 1);
 
     if ($gameId <= 0) {
         http_response_code(400);
@@ -66,6 +75,12 @@ if ($action === 'update_game') {
         exit;
     }
 
+    if (!in_array($status, [1, 2, 3], true)) {
+        http_response_code(400);
+        echo json_encode(['error' => 'Некорректный статус игры']);
+        exit;
+    }
+
     $stmt = $conn->prepare('
         UPDATE games
         SET game_number = :number,
@@ -73,7 +88,8 @@ if ($action === 'update_game') {
             start_time = :time,
             location = :loc,
             price = :price,
-            type = :type
+            type = :type,
+            status = :status
         WHERE id = :id
     ');
 
@@ -84,6 +100,7 @@ if ($action === 'update_game') {
         ':loc' => $location,
         ':price' => $price,
         ':type' => $type,
+        ':status' => $status,
         ':id' => $gameId,
     ]);
 
@@ -97,6 +114,7 @@ if ($action === 'update_game') {
             'location' => $location,
             'price' => $price,
             'type' => $type,
+            'status' => $status,
         ],
     ]);
     exit;
@@ -111,7 +129,7 @@ if ($action === 'get_game_details') {
         exit;
     }
 
-    $gameStmt = $conn->prepare('SELECT id, game_number, game_date, start_time, location, price, type FROM games WHERE id = :id LIMIT 1');
+    $gameStmt = $conn->prepare('SELECT id, game_number, game_date, start_time, location, price, type, status FROM games WHERE id = :id LIMIT 1');
     $gameStmt->execute([':id' => $gameId]);
     $game = $gameStmt->fetch(PDO::FETCH_ASSOC);
 

@@ -76,3 +76,38 @@ function save_format_subscription(PDO $conn, int $userId, string $format): void
         ':format' => $format,
     ]);
 }
+
+function get_game_status_details(int $status): array
+{
+    switch ($status) {
+        case 2:
+            return [
+                'label' => 'Резерв',
+                'description' => 'Статус: можно записаться только в резерв',
+            ];
+        case 3:
+            return [
+                'label' => 'Закрыта',
+                'description' => 'Статус: регистрация закрыта',
+            ];
+        default:
+            return [
+                'label' => 'Есть места',
+                'description' => 'Статус: есть свободные места',
+            ];
+    }
+}
+
+function get_game_status_label(int $status): string
+{
+    $details = get_game_status_details($status);
+
+    return $details['label'] ?? '';
+}
+
+function get_game_status_description(int $status): string
+{
+    $details = get_game_status_details($status);
+
+    return $details['description'] ?? '';
+}

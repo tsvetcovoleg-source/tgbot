@@ -80,6 +80,9 @@ function render_admin_layout_start(string $title, string $activeNav, string $hea
             .games-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
             .game { border: 1px solid var(--border); padding: 12px; border-radius: 10px; background: #fafafa; display: flex; flex-direction: column; gap: 6px; }
             .badge { display: inline-block; padding: 4px 8px; border-radius: 6px; background: #eef2ff; color: #3730a3; font-size: 12px; margin-bottom: 6px; width: fit-content; }
+            .badge.status-1 { background: #ecfdf3; color: #166534; }
+            .badge.status-2 { background: #fffbeb; color: #92400e; }
+            .badge.status-3 { background: #fef2f2; color: #b91c1c; }
             .game-actions { margin-top: 4px; display: flex; gap: 8px; flex-wrap: wrap; }
             .outline-btn { background: transparent; color: var(--blue); border: 1px solid var(--blue); }
             .outline-btn:hover { background: #f0f6ff; }
