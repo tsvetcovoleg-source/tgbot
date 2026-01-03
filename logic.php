@@ -372,13 +372,14 @@ function send_registration_confirmation($game_id, $chat_id, $user_id, $conn, $co
             'UTF-8'
         );
 
+        $teamSuggestionsKeyboard = build_team_suggestions_keyboard($conn, $user_id);
         $statusDetails = get_game_status_details($gameStatus);
         $statusNotice = isset($statusDetails['description']) ? $statusDetails['description'] : '';
 
+        $teamPromptTextWithChoices = "Готовы присоединиться к игре? Тогда просто введите название в ответ на это сообщение либо выберите название команды из списка ниже.";
+        $teamPromptTextWithoutChoices = "Готовы присоединиться к игре? Тогда просто введите название в ответ на это сообщение.";
         $teamPrompt = ($statusNotice !== '' ? $statusNotice . "\n\n" : '') .
-            "Готовы присоединиться к игре? Тогда просто введите название в ответ на это сообщение либо выберите название команды из списка ниже.";
-
-        $teamSuggestionsKeyboard = build_team_suggestions_keyboard($conn, $user_id);
+            ($teamSuggestionsKeyboard !== null ? $teamPromptTextWithChoices : $teamPromptTextWithoutChoices);
 
         $msg = "✅ Отличный выбор!\n\n" .
                "🎮 " . htmlspecialchars($game['game_number'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . "\n" .
@@ -907,11 +908,10 @@ function build_games_message(array $games, array $config)
         $gameNumberEscaped = htmlspecialchars($game['game_number'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
         $locationEscaped = htmlspecialchars($game['location'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
         $priceEscaped = htmlspecialchars($game['price'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
-        $statusDescription = htmlspecialchars(
-            get_game_status_description((int) ($game['status'] ?? 1)),
-            ENT_QUOTES | ENT_SUBSTITUTE,
-            'UTF-8'
-        );
+        $statusDescription = get_game_status_description((int) ($game['status'] ?? 1));
+        $registrationLinkText = ((int) ($game['status'] ?? 1) === 2)
+            ? 'Записаться в резерв'
+            : '✉️ Зарегистрироваться на игру';
 
         $formattedDateTime = format_game_datetime($game['game_date'], $game['start_time']);
         $formattedDateTimeEscaped = htmlspecialchars(
@@ -937,7 +937,7 @@ function build_games_message(array $games, array $config)
             "{$statusDescription}\n\n";
 
         if ($shareLink !== null) {
-            $messageText .= '<a href="' . htmlspecialchars($shareLink, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '">✉️ Зарегистрироваться на игру</a>';
+            $messageText .= '<a href="' . htmlspecialchars($shareLink, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '">' . htmlspecialchars($registrationLinkText, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '</a>';
         } else {
             $messageText .= "Отправьте /start, чтобы открыть бота и зарегистрироваться.";
         }
