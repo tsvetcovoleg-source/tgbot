@@ -142,12 +142,12 @@ function handle_callback($data, $user_id, $chat_id, $config, $conn, $callback) {
 # --------------------- ОБРАБОТЧИКИ КОМАНД ----------------------
 
 function handle_start_command($chat_id, $user_id, $conn, $config) {
-    $message = "Привет! 👋\nДобро пожаловать в MindGames Bot — место, где начинаются ваши игры и впечатления.\nЗапись на события, информация о формате, детали о нас и возможность заказать мероприятие — всё тут.\nЧто хотите сделать? 👇";
+    $message = "Привет! 👋\nЯ твой новый Бадди. Добро пожаловать в мир MindGames — тут скука не выживает, а дофамин чувствует себя отлично 😏\nИгры, форматы и календарь мероприятий — всё под рукой.\nС чего начнём? 👇";
 
     $keyboard = [
         'inline_keyboard' => [
             [
-                ['text' => '📋 Посмотреть список игр', 'callback_data' => 'show_games']
+                ['text' => '📅 Календарь игр', 'callback_data' => 'show_games']
             ],
             [
                 ['text' => 'ℹ️ Узнать про формат игр', 'callback_data' => 'show_game_formats']
@@ -167,7 +167,7 @@ function handle_games_command($chat_id, $user_id, $conn, $config) {
         return null;
     }
 
-    $text = "📋 <b>Список доступных игр:</b>\n\n" . build_games_message($games, $config);
+    $text = "📋 <b>Вот список мероприятий, которые, на данный момент, нами запланированы:</b>\n\n\n" . build_games_message($games, $config);
 
     send_telegram($config, $chat_id, $text, null, 'HTML');
     log_bot_message($user_id, strip_tags($text), $conn);
@@ -534,7 +534,7 @@ function handle_free_text($text, $chat_id, $user_id, $conn, $config) {
         $keyboard = [
             'inline_keyboard' => [
                 [
-                    ['text' => '📋 Посмотреть список игр', 'callback_data' => 'show_games']
+                    ['text' => '📅 Календарь игр', 'callback_data' => 'show_games']
                 ],
                 [
                     ['text' => 'ℹ️ Узнать про формат игр', 'callback_data' => 'show_game_formats']
@@ -720,7 +720,7 @@ function handle_team_suggestion_selection($data, $chat_id, $user_id, $conn, $con
         $keyboard = [
             'inline_keyboard' => [
                 [
-                    ['text' => '📋 Посмотреть список игр', 'callback_data' => 'show_games']
+                    ['text' => '📅 Календарь игр', 'callback_data' => 'show_games']
                 ]
             ]
         ];
@@ -820,7 +820,7 @@ function save_quantity_and_confirm($conn, $config, $chat_id, $user_id, $registra
     $keyboard = [
         'inline_keyboard' => [
             [
-                ['text' => '📋 Посмотреть список игр', 'callback_data' => 'show_games']
+                ['text' => '📅 Календарь игр', 'callback_data' => 'show_games']
             ],
             [
                 ['text' => 'ℹ️ Узнать про формат игр', 'callback_data' => 'show_game_formats']
