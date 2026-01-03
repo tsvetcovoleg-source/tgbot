@@ -376,7 +376,7 @@ function send_registration_confirmation($game_id, $chat_id, $user_id, $conn, $co
         $statusDetails = get_game_status_details($gameStatus);
         $statusNotice = isset($statusDetails['description']) ? $statusDetails['description'] : '';
 
-        $teamPromptTextWithChoices = "Готовы присоединиться к игре? Тогда просто введите название в ответ на это сообщение либо выберите название команды из списка ниже.";
+        $teamPromptTextWithChoices = "Готовы присоединиться к игре?\nТогда просто введите название своей команды или выберите его из списка ниже 👇";
         $teamPromptTextWithoutChoices = "Готовы присоединиться к игре? Тогда просто введите название в ответ на это сообщение.";
         $teamPrompt = ($statusNotice !== '' ? $statusNotice . "\n\n" : '') .
             ($teamSuggestionsKeyboard !== null ? $teamPromptTextWithChoices : $teamPromptTextWithoutChoices);
@@ -509,7 +509,7 @@ function handle_free_text($text, $chat_id, $user_id, $conn, $config) {
 
     // Ищем самую свежую регистрацию без названия команды или количества
     $stmt = $conn->prepare("
-        SELECT id, team, quantity, game_id
+        SELECT id, team, quantity, game_id, status
         FROM registrations
         WHERE user_id = :uid AND (team IS NULL OR team = '' OR quantity IS NULL)
         ORDER BY id DESC
@@ -599,7 +599,7 @@ function handle_quantity_selection($data, $chat_id, $user_id, $conn, $config, $c
     }
 
     $stmt = $conn->prepare("
-        SELECT id, team, game_id
+        SELECT id, team, game_id, status
         FROM registrations
         WHERE user_id = :uid
           AND team IS NOT NULL AND team != ''
@@ -787,6 +787,7 @@ function save_quantity_and_confirm($conn, $config, $chat_id, $user_id, $registra
     $quantityEscaped = htmlspecialchars($quantity, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
 
     $confirm = null;
+    $registrationStatus = isset($registration['status']) ? (int) $registration['status'] : null;
 
     if (!empty($registration['game_id'])) {
         $game = fetch_game_by_id($conn, $registration['game_id']);
@@ -802,14 +803,26 @@ function save_quantity_and_confirm($conn, $config, $chat_id, $user_id, $registra
                 'UTF-8'
             );
 
-            $confirm = "🎉 Вы успешно зарегистрированы!\n\n" .
-                "Вот данные вашей регистрации:\n\n" .
-                "🎮 {$gameNumberEscaped}\n" .
-                "📅 {$formattedDateTimeEscaped}\n" .
-                "📍 {$locationEscaped}\n" .
-                "👥 Команда: «{$teamEscaped}» (Количество игроков: {$quantityEscaped})\n\n" .
-                "Мы вас ждём! Если что-то нужно изменить — просто напишите в чат.\n\n" .
-                "А пока — вот ваши основные кнопки, вдруг пригодятся 👇";
+            if ($registrationStatus === 2) {
+                $confirm = "Вы записались в резерв ✅\n" .
+                    "Вот данные вашей регистрации:\n" .
+                    "🎮 {$gameNumberEscaped}\n" .
+                    "📅 {$formattedDateTimeEscaped}\n" .
+                    "📍 {$locationEscaped}\n" .
+                    "👥 Команда: «{$teamEscaped}» (Количество игроков: {$quantityEscaped})\n" .
+                    "Если появится возможность разместить вашу команду, мы сразу сообщим об этом здесь.\n" .
+                    "Остаёмся на связи 😊\n" .
+                    "А пока — вот ваши основные кнопки, вдруг пригодятся 👇";
+            } else {
+                $confirm = "🎉 Вы успешно зарегистрированы!\n\n" .
+                    "Вот данные вашей регистрации:\n\n" .
+                    "🎮 {$gameNumberEscaped}\n" .
+                    "📅 {$formattedDateTimeEscaped}\n" .
+                    "📍 {$locationEscaped}\n" .
+                    "👥 Команда: «{$teamEscaped}» (Количество игроков: {$quantityEscaped})\n\n" .
+                    "Мы вас ждём! Если что-то нужно изменить — просто напишите в чат.\n\n" .
+                    "А пока — вот ваши основные кнопки, вдруг пригодятся 👇";
+            }
         }
     }
 
