@@ -377,7 +377,7 @@ function send_registration_confirmation($game_id, $chat_id, $user_id, $conn, $co
         $statusNotice = isset($statusDetails['description']) ? $statusDetails['description'] : '';
 
         $teamPromptTextWithChoices = "Готовы присоединиться к игре?\nТогда просто введите название своей команды или выберите его из списка ниже 👇";
-        $teamPromptTextWithoutChoices = "Готовы присоединиться к игре? Тогда просто введите название в ответ на это сообщение.";
+        $teamPromptTextWithoutChoices = "Готовы присоединиться к игре? Тогда просто введите название команды в ответ на это сообщение.";
         $teamPrompt = ($statusNotice !== '' ? $statusNotice . "\n\n" : '') .
             ($teamSuggestionsKeyboard !== null ? $teamPromptTextWithChoices : $teamPromptTextWithoutChoices);
 
