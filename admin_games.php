@@ -4,7 +4,12 @@ require_once __DIR__ . '/format_helpers.php';
 
 [$conn, $config] = bootstrap_admin();
 
-$gamesStmt = $conn->query('SELECT id, game_number, game_date, start_time, location, price, type, status FROM games WHERE status != 3 ORDER BY game_date DESC, id DESC');
+$gamesStmt = $conn->query('
+    SELECT id, game_number, game_date, start_time, location, price, type, status
+    FROM games
+    WHERE TIMESTAMP(game_date, start_time) >= NOW()
+    ORDER BY game_date DESC, id DESC
+');
 $games = $gamesStmt->fetchAll(PDO::FETCH_ASSOC);
 
 render_admin_layout_start('Игры — Админка', 'games', 'Игры');
