@@ -353,8 +353,18 @@ if ($action === 'confirm_reserve') {
     $dateTimeLabel = format_game_datetime_label($row['game_date'], $row['start_time'], $months);
     $teamLabel = trim((string) ($row['team'] ?? ''));
     $quantityLabel = trim((string) ($row['quantity'] ?? ''));
+    $quantityDisplay = '';
 
-    $messageText = "Отличные новости! Мы сможем разместить вашу команду на игре.\n\n" .
+    if ($quantityLabel !== '') {
+        if ($quantityLabel === 'Пока не знаем') {
+            $quantityDisplay = "Количество игроков: {$quantityLabel}";
+        } else {
+            $quantityDisplay = str_replace('-', '–', $quantityLabel) . " игроков";
+        }
+    }
+
+    $messageText = "Отличные новости! 🎉\n" .
+        "Мы нашли место для вашей команды — вы в игре!\n" .
         "🎮 " . $row['game_number'] . "\n" .
         "📅 " . $dateTimeLabel . "\n" .
         "📍 " . $row['location'] . "\n" .
@@ -362,12 +372,12 @@ if ($action === 'confirm_reserve') {
 
     if ($teamLabel !== '') {
         $messageText .= "\n👥 Команда: «" . $teamLabel . "»";
-        if ($quantityLabel !== '') {
-            $messageText .= " (Количество игроков: " . $quantityLabel . ")";
+        if ($quantityDisplay !== '') {
+            $messageText .= " (" . $quantityDisplay . ")";
         }
     }
 
-    $messageText .= "\n\nПросьба, если у вас что-то изменилось, сообщите нам здесь в чате. Спасибо!";
+    $messageText .= "\nЕсли вдруг планы изменятся — просто напишите мне здесь.\nСпасибо 🙌";
 
     $userStatus = isset($row['user_status']) ? (int) $row['user_status'] : null;
     if ($userStatus === 1) {
