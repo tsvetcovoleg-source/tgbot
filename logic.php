@@ -217,8 +217,8 @@ function handle_games_by_types($chat_id, $user_id, $conn, $config, array $types,
         $primaryFormat = resolve_primary_format($types);
         if ($primaryFormat !== null) {
             $formatDisplay = get_format_display_name($primaryFormat);
-            $message = 'Упс. На данный момент у нас нет запланированных игр формата ' . $formatDisplay . '. ' .
-                'Хотите, чтобы мы уведомили вас сразу, как в расписании появится игра этого формата ' . $formatDisplay . '?';
+            $message = 'Упс — пока в расписании нет игр формата ' . $formatDisplay . " 🙈\n" .
+                'Хотите, чтобы мы сразу сообщили вам, как только будет запланирована новая игра этого формата? 👇';
 
             $keyboard = [
                 'inline_keyboard' => [
@@ -905,8 +905,23 @@ function handle_subscribe_format_button($data, $chat_id, $user_id, $conn, $confi
     save_format_subscription($conn, $user_id, $format);
 
     $formatDisplay = get_format_display_name($format);
-    $message = 'Мы уведомим вас, как только появятся новые игры формата ' . $formatDisplay . '. Спасибо!';
-    send_reply($config, $chat_id, $message, null, $user_id, $conn);
+    $message = "Принято 👍\n" .
+        'Я сразу дам вам знать, как только в расписании появится новая игра формата ' . $formatDisplay . ".\n" .
+        "Спасибо! 😌\n" .
+        "А пока — вот ваши основные кнопки, вдруг пригодятся 👇";
+
+    $keyboard = [
+        'inline_keyboard' => [
+            [
+                ['text' => '📅 Календарь игр', 'callback_data' => 'show_games']
+            ],
+            [
+                ['text' => 'ℹ️ Узнать про формат игр', 'callback_data' => 'show_game_formats']
+            ]
+        ]
+    ];
+
+    send_reply($config, $chat_id, $message, $keyboard, $user_id, $conn);
 
     return null;
 }
