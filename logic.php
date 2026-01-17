@@ -804,14 +804,14 @@ function save_quantity_and_confirm($conn, $config, $chat_id, $user_id, $registra
             );
 
             if ($registrationStatus === 2) {
-                $confirm = "Вы записались в резерв ✅\n" .
+                $confirm = "Вы записались в резерв ✅\n\n" .
                     "Вот данные вашей регистрации:\n" .
                     "🎮 {$gameNumberEscaped}\n" .
                     "📅 {$formattedDateTimeEscaped}\n" .
                     "📍 {$locationEscaped}\n" .
-                    "👥 Команда: «{$teamEscaped}» (Количество игроков: {$quantityEscaped})\n" .
+                    "👥 Команда: «{$teamEscaped}» (Количество игроков: {$quantityEscaped})\n\n" .
                     "Если появится возможность разместить вашу команду, мы сразу сообщим об этом здесь.\n" .
-                    "Остаёмся на связи 😊\n" .
+                    "Остаёмся на связи 😊\n\n" .
                     "А пока — вот ваши основные кнопки, вдруг пригодятся 👇";
             } else {
                 $confirm = "🎉 Вы успешно зарегистрированы!\n\n" .
@@ -938,7 +938,7 @@ function build_games_message(array $games, array $config)
         $priceEscaped = htmlspecialchars($game['price'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
         $statusDescription = get_game_status_description((int) ($game['status'] ?? 1));
         $registrationLinkText = ((int) ($game['status'] ?? 1) === 2)
-            ? 'Записаться в резерв'
+            ? '📝 Записаться в резерв'
             : '✉️ Зарегистрироваться на игру';
 
         $formattedDateTime = format_game_datetime($game['game_date'], $game['start_time']);
@@ -961,7 +961,7 @@ function build_games_message(array $games, array $config)
         $messageText = "🎮 {$gameNumberEscaped}\n" .
             "📅 {$formattedDateTimeEscaped}\n" .
             "📍 {$locationEscaped}\n" .
-            "💰 {$priceEscaped}\n" .
+            "💰 {$priceEscaped}\n\n" .
             "{$statusDescription}\n\n";
 
         if ($shareLink !== null) {
