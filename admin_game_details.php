@@ -102,6 +102,7 @@ render_admin_layout_start('Детали игры — Админка', 'games', '
                 <table id="registrations-table" class="registrations-table">
                     <thead>
                     <tr>
+                        <th>№</th>
                         <th>Команда</th>
                         <th>Количество</th>
                         <th>Статус</th>
@@ -112,7 +113,7 @@ render_admin_layout_start('Детали игры — Админка', 'games', '
                     </tr>
                     </thead>
                     <tbody>
-                    <?php foreach ($registrations as $reg): ?>
+                    <?php foreach ($registrations as $index => $reg): ?>
                         <?php
                             $statusValue = (int) ($reg['status'] ?? 1);
                             $statusLabel = get_game_status_label($statusValue);
@@ -120,8 +121,10 @@ render_admin_layout_start('Детали игры — Админка', 'games', '
                             $teamDisplay = trim($teamRaw) !== '' ? $teamRaw : 'Без названия';
                             $quantityRaw = $reg['quantity'] ?? '';
                             $quantityDisplay = trim((string) $quantityRaw) !== '' ? $quantityRaw : '—';
+                            $rowNumber = $index + 1;
                         ?>
                         <tr class="registration-row" data-registration-id="<?php echo (int) $reg['id']; ?>" data-team="<?php echo htmlspecialchars($teamRaw ?? '', ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); ?>" data-quantity="<?php echo htmlspecialchars($quantityRaw ?? '', ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); ?>" data-registration-status="<?php echo $statusValue; ?>">
+                            <td><?php echo $rowNumber; ?></td>
                             <td>
                                 <div class="reg-view team-view"><?php echo htmlspecialchars($teamDisplay); ?></div>
                                 <input type="text" class="reg-edit reg-team" value="<?php echo htmlspecialchars($teamRaw ?? ''); ?>" placeholder="Без названия">
