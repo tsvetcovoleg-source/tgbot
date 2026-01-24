@@ -3,7 +3,16 @@ require_once __DIR__ . '/admin_shared.php';
 
 [$conn, $config] = bootstrap_admin();
 
-$userStmt = $conn->query('SELECT id, telegram_id, first_name, last_name, username FROM users ORDER BY id DESC');
+$userStmt = $conn->query(
+    'SELECT u.id, u.telegram_id, u.first_name, u.last_name, u.username, lm.last_message_id
+     FROM users u
+     LEFT JOIN (
+         SELECT user_id, MAX(id) AS last_message_id
+         FROM messages
+         GROUP BY user_id
+     ) lm ON lm.user_id = u.id
+     ORDER BY lm.last_message_id DESC, u.id DESC'
+);
 $users = $userStmt->fetchAll(PDO::FETCH_ASSOC);
 $selectedUserId = isset($_GET['user_id']) ? (int) $_GET['user_id'] : null;
 
