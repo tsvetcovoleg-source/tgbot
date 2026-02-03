@@ -3,6 +3,27 @@ require_once __DIR__ . '/admin_shared.php';
 
 [$conn, $config] = bootstrap_admin();
 
+$duplicateGameId = (int) ($_GET['duplicate_game_id'] ?? 0);
+$prefill = [
+    'game_number' => '',
+    'game_date' => '',
+    'start_time' => '',
+    'location' => '',
+    'price' => '',
+    'type' => '',
+    'status' => '1',
+];
+
+if ($duplicateGameId > 0) {
+    $duplicateStmt = $conn->prepare('SELECT game_number, game_date, start_time, location, price, type, status FROM games WHERE id = :id LIMIT 1');
+    $duplicateStmt->execute([':id' => $duplicateGameId]);
+    $duplicateGame = $duplicateStmt->fetch(PDO::FETCH_ASSOC);
+
+    if ($duplicateGame) {
+        $prefill = array_merge($prefill, $duplicateGame);
+    }
+}
+
 render_admin_layout_start('Создать игру — Админка', 'create', 'Создать игру');
 ?>
     <div class="card">
@@ -12,34 +33,34 @@ render_admin_layout_start('Создать игру — Админка', 'create'
         </div>
         <form id="game-form">
             <label for="game_number">Название/номер игры</label>
-            <input type="text" id="game_number" name="game_number" required>
+            <input type="text" id="game_number" name="game_number" value="<?php echo htmlspecialchars($prefill['game_number']); ?>" required>
 
             <label for="game_date">Дата (YYYY-MM-DD)</label>
-            <input type="date" id="game_date" name="game_date" required>
+            <input type="date" id="game_date" name="game_date" value="<?php echo htmlspecialchars($prefill['game_date']); ?>" required>
 
             <label for="start_time">Время начала (HH:MM)</label>
-            <input type="time" id="start_time" name="start_time" required>
+            <input type="time" id="start_time" name="start_time" value="<?php echo htmlspecialchars($prefill['start_time']); ?>" required>
 
             <label for="location">Локация</label>
-            <input type="text" id="location" name="location" required>
+            <input type="text" id="location" name="location" value="<?php echo htmlspecialchars($prefill['location']); ?>" required>
 
             <label for="price">Стоимость</label>
-            <input type="text" id="price" name="price" required>
+            <input type="text" id="price" name="price" value="<?php echo htmlspecialchars($prefill['price']); ?>" required>
 
             <label for="type">Тип игры (quiz / detective / quest / ...)</label>
             <select id="type" name="type" required>
                 <option value="">-- выберите --</option>
-                <option value="quiz">quiz</option>
-                <option value="lightquiz">lightquiz</option>
-                <option value="detective">detective</option>
-                <option value="quest">quest</option>
+                <option value="quiz" <?php echo $prefill['type'] === 'quiz' ? 'selected' : ''; ?>>quiz</option>
+                <option value="lightquiz" <?php echo $prefill['type'] === 'lightquiz' ? 'selected' : ''; ?>>lightquiz</option>
+                <option value="detective" <?php echo $prefill['type'] === 'detective' ? 'selected' : ''; ?>>detective</option>
+                <option value="quest" <?php echo $prefill['type'] === 'quest' ? 'selected' : ''; ?>>quest</option>
             </select>
 
             <label for="status">Статус регистрации</label>
             <select id="status" name="status" required>
-                <option value="1">Есть места</option>
-                <option value="2">Только резерв</option>
-                <option value="3">Регистрация закрыта</option>
+                <option value="1" <?php echo (int) $prefill['status'] === 1 ? 'selected' : ''; ?>>Есть места</option>
+                <option value="2" <?php echo (int) $prefill['status'] === 2 ? 'selected' : ''; ?>>Только резерв</option>
+                <option value="3" <?php echo (int) $prefill['status'] === 3 ? 'selected' : ''; ?>>Регистрация закрыта</option>
             </select>
 
             <button type="submit">Создать игру</button>

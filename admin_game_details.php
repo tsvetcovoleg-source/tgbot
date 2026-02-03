@@ -74,6 +74,9 @@ render_admin_layout_start('Детали игры — Админка', 'games', '
             <div class="meta-item"><strong>Дата:</strong> <span id="meta-date"><?php echo htmlspecialchars($game['game_date']); ?></span></div>
             <div class="meta-item"><strong>Время:</strong> <span id="meta-time"><?php echo htmlspecialchars($game['start_time']); ?></span></div>
             <div class="meta-item"><strong>Статус:</strong> <span class="badge status-<?php echo (int) ($game['status'] ?? 1); ?>" id="meta-status"><?php echo htmlspecialchars($statusDetails['label'] ?? ''); ?></span></div>
+            <div class="meta-item">
+                <a class="outline-btn" href="admin_create_game.php?duplicate_game_id=<?php echo (int) $game['id']; ?>">Дублировать игру</a>
+            </div>
         </div>
     </div>
 
