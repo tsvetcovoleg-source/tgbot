@@ -150,7 +150,7 @@ function handle_start_command($chat_id, $user_id, $conn, $config) {
                 ['text' => '📅 Календарь игр', 'callback_data' => 'show_games']
             ],
             [
-                ['text' => 'ℹ️ Узнать про формат игр', 'callback_data' => 'show_game_formats']
+                ['text' => 'ℹ️ Какие игры у нас есть?', 'callback_data' => 'show_game_formats']
             ]
         ]
     ];
@@ -538,7 +538,7 @@ function handle_free_text($text, $chat_id, $user_id, $conn, $config) {
                     ['text' => '📅 Календарь игр', 'callback_data' => 'show_games']
                 ],
                 [
-                    ['text' => 'ℹ️ Узнать про формат игр', 'callback_data' => 'show_game_formats']
+                    ['text' => 'ℹ️ Какие игры у нас есть?', 'callback_data' => 'show_game_formats']
                 ]
             ]
         ];
@@ -837,7 +837,7 @@ function save_quantity_and_confirm($conn, $config, $chat_id, $user_id, $registra
                 ['text' => '📅 Календарь игр', 'callback_data' => 'show_games']
             ],
             [
-                ['text' => 'ℹ️ Узнать про формат игр', 'callback_data' => 'show_game_formats']
+                ['text' => 'ℹ️ Какие игры у нас есть?', 'callback_data' => 'show_game_formats']
             ]
         ]
     ];
@@ -916,7 +916,7 @@ function handle_subscribe_format_button($data, $chat_id, $user_id, $conn, $confi
                 ['text' => '📅 Календарь игр', 'callback_data' => 'show_games']
             ],
             [
-                ['text' => 'ℹ️ Узнать про формат игр', 'callback_data' => 'show_game_formats']
+                ['text' => 'ℹ️ Какие игры у нас есть?', 'callback_data' => 'show_game_formats']
             ]
         ]
     ];
