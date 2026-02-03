@@ -39,7 +39,13 @@ $regsStmt = $conn->prepare('
     FROM registrations r
     INNER JOIN users u ON r.user_id = u.id
     WHERE r.game_id = :gid
-    ORDER BY r.created_at ASC, r.id ASC
+    ORDER BY
+        CASE
+            WHEN r.quantity IS NULL OR r.quantity = \'\' THEN 1
+            ELSE 0
+        END ASC,
+        r.created_at ASC,
+        r.id ASC
 ');
 $regsStmt->execute([':gid' => $gameId]);
 
