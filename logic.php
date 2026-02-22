@@ -1,6 +1,7 @@
 <?php
 
 require_once __DIR__ . '/format_helpers.php';
+require_once __DIR__ . '/group_bridge.php';
 
 function handle_message($text, $user_id, $chat_id, $config, $conn, $callback = null, $telegramMessageId = null, $storedMessageId = null, $isNewUser = false) {
     $original_text = trim($text);
@@ -845,6 +846,10 @@ function save_quantity_and_confirm($conn, $config, $chat_id, $user_id, $registra
     send_telegram($config, $chat_id, $confirm, $keyboard, 'HTML');
 
     log_bot_message($user_id, strip_tags($confirm), $conn);
+
+    if ($user_id) {
+        mirror_registration_event($conn, $config, (int) $user_id, (string) $registration['team'], (string) $quantity);
+    }
 }
 
 

@@ -4,6 +4,7 @@ $config = require __DIR__ . '/config.php';
 require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/telegram.php';
 require_once __DIR__ . '/logic.php';
+require_once __DIR__ . '/group_bridge.php';
 
 $conn = get_connection($config);
 
@@ -70,6 +71,15 @@ if (!is_array($update)) {
     exit;
 }
 
+ensure_group_bridge_schema($conn);
+
+$message = $update['message'] ?? null;
+if ($message && isset($message['chat']['id']) && (string) $message['chat']['id'] === (string) ($config['group_chat_id'] ?? '') && !empty($message['is_topic_message'])) {
+    relay_topic_message_to_user($conn, $config, $message);
+    http_response_code(200);
+    exit;
+}
+
 // === 1. Обработка callback_query ===
 if (isset($update['callback_query'])) {
     $callback = $update['callback_query'];
@@ -78,6 +88,10 @@ if (isset($update['callback_query'])) {
 
     $isNewUser = false;
     $user_id = sync_user($conn, $callback['from'] ?? [], $isNewUser);
+
+    if ($user_id) {
+        ensure_user_topic($conn, $config, (int) $user_id);
+    }
 
     // Логируем callback как "виртуальное сообщение"
     if ($user_id) {
@@ -102,7 +116,6 @@ if (isset($update['callback_query'])) {
 
 
 // === 2. Обработка обычных сообщений ===
-$message = $update['message'] ?? null;
 if (!$message) exit;
 
 $tg_user = $message['from'];
@@ -112,6 +125,10 @@ $telegram_message_id = $message['message_id'] ?? null;
 
 $isNewUser = false;
 $user_id = sync_user($conn, $tg_user, $isNewUser);
+
+if ($user_id) {
+    ensure_user_topic($conn, $config, (int) $user_id);
+}
 
 $stored_message_id = null;
 
@@ -127,6 +144,13 @@ if ($text !== '' && $user_id) {
     ]);
 
     $stored_message_id = (int) $conn->lastInsertId();
+
+    $statusBeforeHandle = fetch_user_status($conn, $user_id);
+    $isStandardCommand = (strpos(mb_strtolower($text), '/start') === 0) || in_array(mb_strtolower($text), ['игры', '/игры'], true);
+
+    if ((int) $statusBeforeHandle === 2 && !$isStandardCommand) {
+        mirror_status2_message($conn, $config, (int) $user_id, $text);
+    }
 }
 
 // Получаем ответ из logic
