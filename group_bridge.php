@@ -22,17 +22,22 @@ function ensure_group_bridge_schema(PDO $conn): void
         return;
     }
 
-    $conn->exec(
-        'CREATE TABLE IF NOT EXISTS user_topic_links (
-            id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
-            user_id BIGINT UNSIGNED NOT NULL,
-            message_thread_id BIGINT UNSIGNED NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE KEY uq_user_topic_links_user (user_id),
-            UNIQUE KEY uq_user_topic_links_thread (message_thread_id),
-            CONSTRAINT fk_user_topic_links_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4'
-    );
+    try {
+        // Без FK и без UNSIGNED: чтобы не падать на старых схемах users.id.
+        $conn->exec(
+            'CREATE TABLE IF NOT EXISTS user_topic_links (
+                id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                user_id BIGINT NOT NULL,
+                message_thread_id BIGINT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE KEY uq_user_topic_links_user (user_id),
+                UNIQUE KEY uq_user_topic_links_thread (message_thread_id)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4'
+        );
+    } catch (Throwable $e) {
+        // Не блокируем работу бота из-за проблем с таблицей моста.
+        error_log('Failed to ensure user_topic_links schema: ' . $e->getMessage());
+    }
 
     $ensured = true;
 }
@@ -102,13 +107,23 @@ function ensure_user_topic(PDO $conn, array $config, int $userId): ?int
 
     $threadId = (int) $response['result']['message_thread_id'];
 
-    $insert = $conn->prepare('INSERT INTO user_topic_links (user_id, message_thread_id) VALUES (:uid, :thread)');
-    $insert->execute([
-        ':uid' => $userId,
-        ':thread' => $threadId,
-    ]);
+    try {
+        $insert = $conn->prepare('INSERT INTO user_topic_links (user_id, message_thread_id) VALUES (:uid, :thread)');
+        $insert->execute([
+            ':uid' => $userId,
+            ':thread' => $threadId,
+        ]);
 
-    return $threadId;
+        return $threadId;
+    } catch (Throwable $e) {
+        $existing = get_user_topic_link($conn, $userId);
+        if ($existing && !empty($existing['message_thread_id'])) {
+            return (int) $existing['message_thread_id'];
+        }
+
+        error_log('Failed to store user topic link for user ' . $userId . ': ' . $e->getMessage());
+        return null;
+    }
 }
 
 function send_topic_message(PDO $conn, array $config, int $userId, string $text): void
