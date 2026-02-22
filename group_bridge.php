@@ -14,6 +14,21 @@ function is_group_bridge_enabled(array $config): bool
     return true;
 }
 
+
+function get_group_fallback_thread_id(array $config): ?int
+{
+    if (!array_key_exists('group_fallback_thread_id', $config)) {
+        return null;
+    }
+
+    $value = $config['group_fallback_thread_id'];
+    if ($value === null || $value === '') {
+        return null;
+    }
+
+    return (int) $value;
+}
+
 function ensure_group_bridge_schema(PDO $conn): void
 {
     static $ensured = false;
@@ -76,6 +91,8 @@ function build_topic_title(array $userRow): string
 
 function ensure_user_topic(PDO $conn, array $config, int $userId): ?int
 {
+    static $topicCreationForbidden = false;
+
     if (!is_group_bridge_enabled($config)) {
         return null;
     }
@@ -87,12 +104,16 @@ function ensure_user_topic(PDO $conn, array $config, int $userId): ?int
         return (int) $existing['message_thread_id'];
     }
 
+    if ($topicCreationForbidden) {
+        return get_group_fallback_thread_id($config);
+    }
+
     $stmt = $conn->prepare('SELECT telegram_id, first_name, last_name, username FROM users WHERE id = :id LIMIT 1');
     $stmt->execute([':id' => $userId]);
     $userRow = $stmt->fetch(PDO::FETCH_ASSOC);
 
     if (!$userRow || empty($userRow['telegram_id'])) {
-        return null;
+        return get_group_fallback_thread_id($config);
     }
 
     $response = telegram_request($config, 'createForumTopic', [
@@ -101,8 +122,17 @@ function ensure_user_topic(PDO $conn, array $config, int $userId): ?int
     ]);
 
     if (!is_array($response) || empty($response['ok']) || empty($response['result']['message_thread_id'])) {
+        $description = isset($response['description']) ? (string) $response['description'] : '';
+
+        if ($description !== '' && stripos($description, 'not enough rights to create a topic') !== false) {
+            $topicCreationForbidden = true;
+            error_log('Topic creation is forbidden for bot. Grant "Manage Topics" rights or set group_fallback_thread_id in config.');
+
+            return get_group_fallback_thread_id($config);
+        }
+
         error_log('Failed to create forum topic for user ' . $userId . ': ' . json_encode($response));
-        return null;
+        return get_group_fallback_thread_id($config);
     }
 
     $threadId = (int) $response['result']['message_thread_id'];
@@ -122,7 +152,7 @@ function ensure_user_topic(PDO $conn, array $config, int $userId): ?int
         }
 
         error_log('Failed to store user topic link for user ' . $userId . ': ' . $e->getMessage());
-        return null;
+        return get_group_fallback_thread_id($config);
     }
 }
 
@@ -133,15 +163,17 @@ function send_topic_message(PDO $conn, array $config, int $userId, string $text)
     }
 
     $threadId = ensure_user_topic($conn, $config, $userId);
-    if (!$threadId) {
-        return;
+
+    $params = [
+        'chat_id' => $config['group_chat_id'],
+        'text' => $text,
+    ];
+
+    if ($threadId) {
+        $params['message_thread_id'] = $threadId;
     }
 
-    telegram_request($config, 'sendMessage', [
-        'chat_id' => $config['group_chat_id'],
-        'message_thread_id' => $threadId,
-        'text' => $text,
-    ]);
+    telegram_request($config, 'sendMessage', $params);
 }
 
 function mirror_status2_message(PDO $conn, array $config, int $userId, string $text): void

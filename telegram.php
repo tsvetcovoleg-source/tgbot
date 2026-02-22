@@ -29,12 +29,18 @@ function telegram_request(array $config, string $method, array $params = []): ?a
     $statusCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     curl_close($ch);
 
+    $decoded = json_decode($response, true);
+
     if ($statusCode < 200 || $statusCode >= 300) {
         error_log('Telegram request failed with status ' . $statusCode . ': ' . $response);
+
+        if (is_array($decoded)) {
+            return $decoded;
+        }
+
         return null;
     }
 
-    $decoded = json_decode($response, true);
     if (json_last_error() !== JSON_ERROR_NONE) {
         error_log('Failed to decode Telegram response: ' . json_last_error_msg());
         return null;
