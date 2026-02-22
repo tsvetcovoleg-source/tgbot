@@ -183,20 +183,32 @@ function mirror_status2_message(PDO $conn, array $config, int $userId, string $t
     }
 
     $safeText = mb_substr(trim($text), 0, 3500);
-    send_topic_message($conn, $config, $userId, "💬 Сообщение (status=2):\n" . $safeText);
+    send_topic_message($conn, $config, $userId, "💬 Сообщение от пользователя:\n" . $safeText);
 }
 
-function mirror_registration_event(PDO $conn, array $config, int $userId, string $team, string $quantity): void
+function mirror_registration_event(PDO $conn, array $config, int $userId, string $team, string $quantity, ?string $gameName = null, ?string $gameDateTime = null): void
 {
     $teamText = trim($team) !== '' ? $team : '—';
     $quantityText = trim($quantity) !== '' ? $quantity : '—';
+    $gameNameText = trim((string) $gameName) !== '' ? trim((string) $gameName) : '—';
+    $gameDateTimeText = trim((string) $gameDateTime) !== '' ? trim((string) $gameDateTime) : '—';
 
     send_topic_message(
         $conn,
         $config,
         $userId,
-        "✅ Пользователь зарегистрировал команду\n👥 Команда: {$teamText}\n🔢 Количество: {$quantityText}"
+        "✅ Пользователь зарегистрировал команду\n🎮 Игра: {$gameNameText}\n📅 Дата игры: {$gameDateTimeText}\n👥 Команда: {$teamText}\n🔢 Количество: {$quantityText}"
     );
+}
+
+function mirror_bot_reply_message(PDO $conn, array $config, int $userId, string $text): void
+{
+    if (trim($text) === '') {
+        return;
+    }
+
+    $safeText = mb_substr(trim($text), 0, 3500);
+    send_topic_message($conn, $config, $userId, "🤖 Ответ бота пользователю:\n" . $safeText);
 }
 
 function relay_topic_message_to_user(PDO $conn, array $config, array $message): bool

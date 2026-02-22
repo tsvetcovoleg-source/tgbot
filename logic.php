@@ -848,7 +848,23 @@ function save_quantity_and_confirm($conn, $config, $chat_id, $user_id, $registra
     log_bot_message($user_id, strip_tags($confirm), $conn);
 
     if ($user_id) {
-        mirror_registration_event($conn, $config, (int) $user_id, (string) $registration['team'], (string) $quantity);
+        $gameName = null;
+        $gameDateTime = null;
+
+        if (!empty($game)) {
+            $gameName = isset($game['game_number']) ? (string) $game['game_number'] : null;
+            $gameDateTime = $formattedDateTime ?? trim(((string) ($game['game_date'] ?? '')) . ' ' . ((string) ($game['start_time'] ?? '')));
+        }
+
+        mirror_registration_event(
+            $conn,
+            $config,
+            (int) $user_id,
+            (string) $registration['team'],
+            (string) $quantity,
+            $gameName,
+            $gameDateTime
+        );
     }
 }
 
