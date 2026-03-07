@@ -96,6 +96,14 @@ $lotBets = array_map(static function ($row) {
     ];
 }, $lotBetsStmt->fetchAll(PDO::FETCH_ASSOC));
 
+
+$botUsername = isset($config['bot_username']) ? trim((string) $config['bot_username']) : '';
+$botUsername = ltrim($botUsername, '@');
+$lotPayload = (string) ((int) $gameId) . '_lot';
+$lotDeepLink = $botUsername !== ''
+    ? sprintf('https://t.me/%s?start=%s', rawurlencode($botUsername), rawurlencode($lotPayload))
+    : null;
+
 $statusDetails = get_game_status_details((int) ($game['status'] ?? 1));
 
 render_admin_layout_start('Детали игры — Админка', 'games', 'Детали игры');
@@ -203,8 +211,17 @@ render_admin_layout_start('Детали игры — Админка', 'games', '
 
     <div class="card">
         <div class="section-header">
-            <h3>Ставки команд (lot)</h3>
-            <p class="muted-small">Список ставок, отправленных через диплинк вида /start {id}_lot.</p>
+            <div>
+                <h3>Ставки команд (lot)</h3>
+                <p class="muted-small">Диплинк для этой игры:</p>
+            </div>
+            <div class="meta-item" style="min-width: 380px; max-width: 100%;">
+                <?php if ($lotDeepLink !== null): ?>
+                    <input type="text" readonly value="<?php echo htmlspecialchars($lotDeepLink, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); ?>" onclick="this.select(); document.execCommand('copy');">
+                <?php else: ?>
+                    <div class="muted-small">Не удалось сформировать ссылку: в config отсутствует bot_username.</div>
+                <?php endif; ?>
+            </div>
         </div>
         <?php if (!$lotBets): ?>
             <p class="muted">Ставок пока нет.</p>
