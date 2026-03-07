@@ -97,8 +97,10 @@ $lotBets = array_map(static function ($row) {
 }, $lotBetsStmt->fetchAll(PDO::FETCH_ASSOC));
 
 
-$botUsername = isset($config['bot_username']) ? trim((string) $config['bot_username']) : '';
-$botUsername = ltrim($botUsername, '@');
+$botUsernameRaw = isset($config['lot_bot_username']) && trim((string) $config['lot_bot_username']) !== ''
+    ? (string) $config['lot_bot_username']
+    : (string) ($config['bot_username'] ?? '');
+$botUsername = ltrim(trim($botUsernameRaw), '@');
 $lotPayload = (string) ((int) $gameId) . '_lot';
 $lotDeepLink = $botUsername !== ''
     ? sprintf('https://t.me/%s?start=%s', rawurlencode($botUsername), rawurlencode($lotPayload))
@@ -219,7 +221,7 @@ render_admin_layout_start('Детали игры — Админка', 'games', '
                 <?php if ($lotDeepLink !== null): ?>
                     <input type="text" readonly value="<?php echo htmlspecialchars($lotDeepLink, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); ?>" onclick="this.select(); document.execCommand('copy');">
                 <?php else: ?>
-                    <div class="muted-small">Не удалось сформировать ссылку: в config отсутствует bot_username.</div>
+                    <div class="muted-small">Не удалось сформировать ссылку: в config отсутствует lot_bot_username/bot_username.</div>
                 <?php endif; ?>
             </div>
         </div>
