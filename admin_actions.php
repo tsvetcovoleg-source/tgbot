@@ -4,6 +4,7 @@ require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/telegram.php';
 require_once __DIR__ . '/format_helpers.php';
 require_once __DIR__ . '/admin_auth.php';
+require_once __DIR__ . '/group_bridge.php';
 
 header('Content-Type: application/json; charset=utf-8');
 
@@ -255,6 +256,8 @@ if ($action === 'send_message') {
         ':uid' => $userId,
         ':msg' => $messageText,
     ]);
+
+    mirror_bot_reply_message($conn, $config, $userId, $messageText);
 
     echo json_encode([
         'success' => true,
