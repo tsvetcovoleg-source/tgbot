@@ -67,6 +67,45 @@ $registrations = array_map(static function ($row) {
     ];
 }, $regsStmt->fetchAll(PDO::FETCH_ASSOC));
 
+
+$lotBetsStmt = $conn->prepare('
+    SELECT lb.id, lb.team_name, lb.bet_option, lb.created_at, u.first_name, u.last_name, u.username
+    FROM game_lot_bets lb
+    INNER JOIN users u ON lb.user_id = u.id
+    WHERE lb.game_id = :gid
+      AND lb.team_name IS NOT NULL
+      AND lb.team_name != \'\'
+      AND lb.bet_option IS NOT NULL
+      AND lb.bet_option != \'\'
+    ORDER BY lb.created_at ASC, lb.id ASC
+');
+$lotBetsStmt->execute([':gid' => $gameId]);
+
+$lotBets = array_map(static function ($row) {
+    $name = trim(($row['first_name'] ?? '') . ' ' . ($row['last_name'] ?? ''));
+    $username = $row['username'] ? '(@' . $row['username'] . ')' : '';
+    $label = $name !== '' ? $name : 'Без имени';
+    $label .= $username ? ' ' . $username : '';
+
+    return [
+        'id' => (int) $row['id'],
+        'team_name' => $row['team_name'],
+        'bet_option' => $row['bet_option'],
+        'created_at' => $row['created_at'],
+        'user_label' => $label,
+    ];
+}, $lotBetsStmt->fetchAll(PDO::FETCH_ASSOC));
+
+
+$botUsernameRaw = isset($config['lot_bot_username']) && trim((string) $config['lot_bot_username']) !== ''
+    ? (string) $config['lot_bot_username']
+    : (string) ($config['bot_username'] ?? '');
+$botUsername = ltrim(trim($botUsernameRaw), '@');
+$lotPayload = (string) ((int) $gameId) . '_lot';
+$lotDeepLink = $botUsername !== ''
+    ? sprintf('https://t.me/%s?start=%s', rawurlencode($botUsername), rawurlencode($lotPayload))
+    : null;
+
 $statusDetails = get_game_status_details((int) ($game['status'] ?? 1));
 
 render_admin_layout_start('Детали игры — Админка', 'games', 'Детали игры');
@@ -164,6 +203,50 @@ render_admin_layout_start('Детали игры — Админка', 'games', '
                                 </div>
                                 <div class="muted-small row-status"></div>
                             </td>
+                        </tr>
+                    <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+        <?php endif; ?>
+    </div>
+
+    <div class="card">
+        <div class="section-header">
+            <div>
+                <h3>Ставки команд (lot)</h3>
+                <p class="muted-small">Диплинк для этой игры:</p>
+            </div>
+            <div class="meta-item" style="min-width: 380px; max-width: 100%;">
+                <?php if ($lotDeepLink !== null): ?>
+                    <input type="text" readonly value="<?php echo htmlspecialchars($lotDeepLink, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); ?>" onclick="this.select(); document.execCommand('copy');">
+                <?php else: ?>
+                    <div class="muted-small">Не удалось сформировать ссылку: в config отсутствует lot_bot_username/bot_username.</div>
+                <?php endif; ?>
+            </div>
+        </div>
+        <?php if (!$lotBets): ?>
+            <p class="muted">Ставок пока нет.</p>
+        <?php else: ?>
+            <div class="table-wrapper">
+                <table class="registrations-table">
+                    <thead>
+                    <tr>
+                        <th>№</th>
+                        <th>Команда</th>
+                        <th>Ставка</th>
+                        <th>Пользователь</th>
+                        <th>Создано</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    <?php foreach ($lotBets as $index => $bet): ?>
+                        <tr>
+                            <td><?php echo $index + 1; ?></td>
+                            <td><?php echo htmlspecialchars($bet['team_name'] ?? '—'); ?></td>
+                            <td><?php echo htmlspecialchars($bet['bet_option'] ?? '—'); ?></td>
+                            <td><?php echo htmlspecialchars($bet['user_label'] ?? '—'); ?></td>
+                            <td><?php echo htmlspecialchars($bet['created_at'] ?? ''); ?></td>
                         </tr>
                     <?php endforeach; ?>
                     </tbody>

@@ -49,6 +49,17 @@ function handle_start_with_payload($chat_id, $user_id, $conn, $config, $payload,
 {
     update_user_status($conn, $user_id, 1);
 
+    if (preg_match('/^(?P<game_id>\d+)(?:[_\/-])lot$/iu', $payload, $match)) {
+        $gameId = (int) ($match['game_id'] ?? 0);
+        if ($gameId > 0) {
+            if ($telegramMessageId) {
+                delete_message_silently($config, $chat_id, $telegramMessageId);
+            }
+
+            return handle_lot_deep_link($chat_id, $user_id, $conn, $config, $gameId);
+        }
+    }
+
     if ($payload === 'quiz') {
         if ($telegramMessageId) {
             delete_message_silently($config, $chat_id, $telegramMessageId);
@@ -129,6 +140,10 @@ function handle_callback($data, $user_id, $chat_id, $config, $conn, $callback) {
 
     if (strpos($data, 'team_suggestion_') === 0) {
         return handle_team_suggestion_selection($data, $chat_id, $user_id, $conn, $config);
+    }
+
+    if (strpos($data, 'lot_bet_') === 0) {
+        return handle_lot_bet_selection($data, $chat_id, $user_id, $conn, $config, $callback);
     }
 
     if (strpos($data, 'subscribe_format_') === 0) {
@@ -508,6 +523,13 @@ function handle_free_text($text, $chat_id, $user_id, $conn, $config) {
         return 'Название команды не может быть пустым. Пожалуйста, отправьте текстовое название.';
     }
 
+    $pendingLot = fetch_pending_game_lot($conn, $user_id);
+    if ($pendingLot) {
+        update_user_status($conn, $user_id, 1);
+        save_lot_team_and_request_bet($conn, $config, $chat_id, $user_id, $pendingLot, $userInput);
+        return null;
+    }
+
     // Ищем самую свежую регистрацию без названия команды или количества
     $stmt = $conn->prepare("
         SELECT id, team, quantity, game_id, status
@@ -618,6 +640,118 @@ function handle_quantity_selection($data, $chat_id, $user_id, $conn, $config, $c
     save_quantity_and_confirm($conn, $config, $chat_id, $user_id, $registration, $selectedQuantity);
 
     return null;
+}
+
+function handle_lot_bet_selection($data, $chat_id, $user_id, $conn, $config, $callback)
+{
+    $betKey = str_replace('lot_bet_', '', $data);
+    $options = get_lot_bet_options();
+
+    if (!isset($options[$betKey])) {
+        return null;
+    }
+
+    $lot = fetch_pending_game_lot($conn, $user_id);
+    if (!$lot || trim((string) ($lot['team_name'] ?? '')) === '') {
+        return null;
+    }
+
+    $betLabel = $options[$betKey];
+
+    $stmt = $conn->prepare('UPDATE game_lot_bets SET bet_option = :bet WHERE id = :id');
+    $stmt->execute([
+        ':bet' => $betLabel,
+        ':id' => (int) $lot['id'],
+    ]);
+
+    $teamEscaped = htmlspecialchars($lot['team_name'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+    $betEscaped = htmlspecialchars($betLabel, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+
+    $confirm = "✅ Ставка принята!\n\n" .
+        "👥 Команда: «{$teamEscaped}»\n" .
+        "🎯 Ставка: {$betEscaped}";
+
+    send_telegram($config, $chat_id, $confirm, ['remove_keyboard' => true], 'HTML');
+    log_bot_message($user_id, strip_tags($confirm), $conn);
+
+    return null;
+}
+
+function handle_lot_deep_link($chat_id, $user_id, $conn, $config, $gameId)
+{
+    $game = fetch_game_by_id($conn, $gameId);
+
+    if (!$game) {
+        send_reply($config, $chat_id, '❌ Игра не найдена. Проверьте ссылку и попробуйте снова.', null, $user_id, $conn);
+        return null;
+    }
+
+    prepare_lot_for_team_entry($conn, $user_id, $gameId);
+
+    $message = "Шаг 1: Введите название своей команды";
+    send_telegram($config, $chat_id, $message, ['remove_keyboard' => true], 'HTML');
+    log_bot_message($user_id, strip_tags($message), $conn);
+
+    return null;
+}
+
+function prepare_lot_for_team_entry($conn, $user_id, $gameId)
+{
+    $stmt = $conn->prepare('INSERT INTO game_lot_bets (user_id, game_id, created_at) VALUES (:uid, :gid, NOW())');
+    $stmt->execute([
+        ':uid' => (int) $user_id,
+        ':gid' => (int) $gameId,
+    ]);
+}
+
+function fetch_pending_game_lot($conn, $user_id)
+{
+    $stmt = $conn->prepare('
+        SELECT id, game_id, team_name, bet_option
+        FROM game_lot_bets
+        WHERE user_id = :uid
+          AND bet_option IS NULL
+        ORDER BY id DESC
+        LIMIT 1
+    ');
+    $stmt->execute([':uid' => (int) $user_id]);
+
+    return $stmt->fetch(PDO::FETCH_ASSOC);
+}
+
+function get_lot_bet_options()
+{
+    return [
+        'plus1_0' => '+1 / 0',
+        'plus2_minus2' => '+2 / -2',
+    ];
+}
+
+function build_lot_bet_keyboard()
+{
+    $options = get_lot_bet_options();
+
+    return [
+        'inline_keyboard' => [
+            [['text' => $options['plus1_0'], 'callback_data' => 'lot_bet_plus1_0']],
+            [['text' => $options['plus2_minus2'], 'callback_data' => 'lot_bet_plus2_minus2']],
+        ],
+    ];
+}
+
+function save_lot_team_and_request_bet($conn, $config, $chat_id, $user_id, $lot, $teamName)
+{
+    $stmt = $conn->prepare('UPDATE game_lot_bets SET team_name = :team WHERE id = :id');
+    $stmt->execute([
+        ':team' => $teamName,
+        ':id' => (int) $lot['id'],
+    ]);
+
+    $message = "Шаг 2: Выберите свою ставку";
+    $keyboard = build_lot_bet_keyboard();
+
+    send_telegram($config, $chat_id, $message, $keyboard, 'HTML');
+    log_bot_message($user_id, strip_tags($message), $conn);
 }
 
 function get_quantity_options() {
