@@ -667,11 +667,21 @@ function handle_lot_bet_selection($data, $chat_id, $user_id, $conn, $config, $ca
     $teamEscaped = htmlspecialchars($lot['team_name'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
     $betEscaped = htmlspecialchars($betLabel, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
 
-    $confirm = "✅ Ставка принята!\n\n" .
-        "👥 Команда: «{$teamEscaped}»\n" .
-        "🎯 Ставка: {$betEscaped}";
+    $confirm = "Умный ход. Мы всё записали: ставка {$betEscaped} для команды «{$teamEscaped}»\n\n" .
+        "На будущее — держите наши основные кнопки, вдруг пригодятся 👇";
 
-    send_telegram($config, $chat_id, $confirm, ['remove_keyboard' => true], 'HTML');
+    $keyboard = [
+        'inline_keyboard' => [
+            [
+                ['text' => '📅 Календарь игр', 'callback_data' => 'show_games']
+            ],
+            [
+                ['text' => 'ℹ️ Какие игры у нас есть?', 'callback_data' => 'show_game_formats']
+            ]
+        ]
+    ];
+
+    send_telegram($config, $chat_id, $confirm, $keyboard, 'HTML');
     log_bot_message($user_id, strip_tags($confirm), $conn);
 
     return null;
@@ -688,7 +698,10 @@ function handle_lot_deep_link($chat_id, $user_id, $conn, $config, $gameId)
 
     prepare_lot_for_team_entry($conn, $user_id, $gameId);
 
-    $message = "Шаг 1: Введите название своей команды";
+    $gameNameEscaped = htmlspecialchars($game['game_number'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+
+    $message = "Давайте посмотрим, какую ставку вы выберете для тематического раунда на игре «{$gameNameEscaped}».\n" .
+        "Сперва введите название своей команды:";
     send_telegram($config, $chat_id, $message, ['remove_keyboard' => true], 'HTML');
     log_bot_message($user_id, strip_tags($message), $conn);
 
@@ -747,7 +760,7 @@ function save_lot_team_and_request_bet($conn, $config, $chat_id, $user_id, $lot,
         ':id' => (int) $lot['id'],
     ]);
 
-    $message = "Шаг 2: Выберите свою ставку";
+    $message = "А теперь нажмите на ставку, которую вы выбираете 👇";
     $keyboard = build_lot_bet_keyboard();
 
     send_telegram($config, $chat_id, $message, $keyboard, 'HTML');
