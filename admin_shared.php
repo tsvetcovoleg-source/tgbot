@@ -62,6 +62,8 @@ function render_admin_layout_start(string $title, string $activeNav, string $hea
             button:hover { background: var(--blue-dark); }
             .ghost-btn { background: transparent; border: 1px solid var(--border); color: #0f172a; }
             .ghost-btn:hover { border-color: var(--blue); color: var(--blue); }
+            .mini-btn { margin-top: 8px; padding: 6px 10px; font-size: 12px; border-radius: 7px; background: #2563eb; }
+            .mini-btn:hover { background: #1d4ed8; }
             .link { color: #0066ff; text-decoration: none; font-weight: 600; }
             .link:hover { text-decoration: underline; }
             .success { color: #059669; }

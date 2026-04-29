@@ -424,7 +424,7 @@ if ($action === 'get_user_messages') {
         exit;
     }
 
-    $stmt = $conn->prepare('SELECT id, message, from_bot FROM messages WHERE user_id = :uid ORDER BY id ASC');
+    $stmt = $conn->prepare('SELECT id, message, from_bot, text_grammar FROM messages WHERE user_id = :uid ORDER BY id ASC');
     $stmt->execute([':uid' => $userId]);
 
     echo json_encode([
@@ -434,8 +434,104 @@ if ($action === 'get_user_messages') {
                 'id' => (int) $row['id'],
                 'message' => $row['message'],
                 'from_bot' => (bool) $row['from_bot'],
+                'text_grammar' => $row['text_grammar'] ?? null,
             ];
         }, $stmt->fetchAll(PDO::FETCH_ASSOC)),
+    ]);
+    exit;
+}
+
+if ($action === 'format_message_grammar') {
+    $userId = (int) ($_POST['user_id'] ?? 0);
+    $messageId = (int) ($_POST['message_id'] ?? 0);
+
+    if ($userId <= 0 || $messageId <= 0) {
+        http_response_code(400);
+        echo json_encode(['error' => 'Некорректные параметры']);
+        exit;
+    }
+
+    $messageStmt = $conn->prepare('SELECT id, message, from_bot FROM messages WHERE id = :id AND user_id = :uid LIMIT 1');
+    $messageStmt->execute([':id' => $messageId, ':uid' => $userId]);
+    $row = $messageStmt->fetch(PDO::FETCH_ASSOC);
+
+    if (!$row) {
+        http_response_code(404);
+        echo json_encode(['error' => 'Сообщение не найдено']);
+        exit;
+    }
+
+    if ((int) $row['from_bot'] === 1) {
+        http_response_code(400);
+        echo json_encode(['error' => 'Можно форматировать только сообщения пользователя']);
+        exit;
+    }
+
+    $apiKey = trim((string) ($config['gemini_api_key'] ?? ''));
+    if ($apiKey === '') {
+        http_response_code(500);
+        echo json_encode(['error' => 'Не задан gemini_api_key в config.php']);
+        exit;
+    }
+
+    $prompt = "You are a professional English editor with experience in fintech and credit risk.\n\nYour task is to rewrite the user's answer in clear, correct, and professional English.\n\nSTRICT RULES:\n\n* Do NOT add any new ideas, arguments, or examples.\n* Do NOT change the meaning.\n* Do NOT expand the content.\n* Only improve grammar, wording, and sentence structure.\n* Use standard financial and credit risk terminology where appropriate.\n* Prefer simple, clear, business-friendly language.\n* Avoid overly complex or academic vocabulary.\n* Keep the tone suitable for a fintech interview.\n\nOUTPUT RULE:\n\n* Return ONLY the corrected version.\n* Do NOT add explanations, comments, or formatting.\n* Do NOT include titles like \"Corrected version\".\n* Do NOT use bullet points.\n\n---\n\nUser answer:\n\"\"\"\n" . trim((string) $row['message']) . "\n\"\"\"";
+
+    $url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' . rawurlencode($apiKey);
+    $payload = [
+        'contents' => [
+            [
+                'parts' => [
+                    ['text' => $prompt],
+                ],
+            ],
+        ],
+    ];
+
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_POST => true,
+        CURLOPT_HTTPHEADER => ['Content-Type: application/json'],
+        CURLOPT_POSTFIELDS => json_encode($payload, JSON_UNESCAPED_UNICODE),
+        CURLOPT_TIMEOUT => 45,
+    ]);
+    $rawResponse = curl_exec($ch);
+    $httpCode = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $curlError = curl_error($ch);
+    curl_close($ch);
+
+    if ($rawResponse === false || $httpCode >= 400) {
+        http_response_code(502);
+        echo json_encode(['error' => 'Ошибка Gemini API: ' . ($curlError !== '' ? $curlError : ('HTTP ' . $httpCode))]);
+        exit;
+    }
+
+    $decoded = json_decode($rawResponse, true);
+    $formatted = trim((string) ($decoded['candidates'][0]['content']['parts'][0]['text'] ?? ''));
+
+    if ($formatted === '') {
+        http_response_code(502);
+        echo json_encode(['error' => 'Gemini вернул пустой ответ']);
+        exit;
+    }
+
+    $updateStmt = $conn->prepare('UPDATE messages SET text_grammar = :grammar WHERE id = :id AND user_id = :uid');
+    $updateStmt->execute([
+        ':grammar' => $formatted,
+        ':id' => $messageId,
+        ':uid' => $userId,
+    ]);
+
+    $insertBot = $conn->prepare('INSERT INTO messages (user_id, message, from_bot) VALUES (:uid, :msg, 1)');
+    $insertBot->execute([
+        ':uid' => $userId,
+        ':msg' => $formatted,
+    ]);
+
+    echo json_encode([
+        'success' => true,
+        'formatted' => $formatted,
+        'bot_message_id' => (int) $conn->lastInsertId(),
     ]);
     exit;
 }
