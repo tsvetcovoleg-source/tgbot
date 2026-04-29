@@ -77,9 +77,50 @@ render_admin_layout_start('Диалоги — Админка', 'dialogues', 'Д�
 
         dialogueFeed.innerHTML = messages.map(msg => {
             const side = msg.from_bot ? 'bot' : 'user';
-            return `<div class="bubble ${side}">${escapeHtml(msg.message || '')}</div>`;
+            const controls = !msg.from_bot
+                ? `<button class="mini-btn js-grammar-btn" data-message-id="${msg.id}">Сформулировать грамотно</button>`
+                : '';
+            const grammar = msg.text_grammar ? `<div class="muted-small" style="margin-top:6px;">text-grammar: ${escapeHtml(msg.text_grammar)}</div>` : '';
+            return `<div class="bubble ${side}">${escapeHtml(msg.message || '')}${grammar}${controls}</div>`;
         }).join('');
         dialogueFeed.scrollTop = dialogueFeed.scrollHeight;
+    }
+
+    function formatMessageGrammar(messageId) {
+        const status = document.getElementById('dialogue-status');
+        if (!activeUserId || !messageId) return;
+
+        const formData = new FormData();
+        formData.append('action', 'format_message_grammar');
+        formData.append('user_id', activeUserId);
+        formData.append('message_id', messageId);
+
+        if (status) {
+            status.textContent = 'Формируем грамотную версию...';
+            status.className = '';
+        }
+
+        fetch('admin_actions.php', {
+            method: 'POST',
+            body: formData
+        }).then(async (res) => {
+            const data = await res.json();
+            if (res.ok && data.success) {
+                if (status) {
+                    status.textContent = 'Готово';
+                    status.className = 'success';
+                }
+                loadUserMessages(activeUserId);
+            } else if (status) {
+                status.textContent = data.error || 'Не удалось сформулировать';
+                status.className = 'error';
+            }
+        }).catch(() => {
+            if (status) {
+                status.textContent = 'Ошибка сети при обработке';
+                status.className = 'error';
+            }
+        });
     }
 
     function loadUserMessages(userId) {
@@ -192,6 +233,14 @@ render_admin_layout_start('Диалоги — Админка', 'dialogues', 'Д�
                     status.className = 'error';
                 }
             });
+        });
+    }
+
+    if (dialogueFeed) {
+        dialogueFeed.addEventListener('click', (event) => {
+            const btn = event.target.closest('.js-grammar-btn');
+            if (!btn) return;
+            formatMessageGrammar(btn.dataset.messageId);
         });
     }
 
