@@ -519,11 +519,29 @@ function handle_free_text($text, $chat_id, $user_id, $conn, $config) {
 
     $userInput = trim($text);
 
+    $pendingLot = fetch_pending_game_lot($conn, $user_id);
     if ($userInput === '') {
-        return 'Название команды не может быть пустым. Пожалуйста, отправьте текстовое название.';
+        if ($pendingLot) {
+            return 'Название команды не может быть пустым. Пожалуйста, отправьте текстовое название.';
+        }
+
+        $stmtPendingRegistration = $conn->prepare("
+            SELECT id
+            FROM registrations
+            WHERE user_id = :uid AND (team IS NULL OR team = '' OR quantity IS NULL)
+            ORDER BY id DESC
+            LIMIT 1
+        " );
+        $stmtPendingRegistration->execute([':uid' => $user_id]);
+        $hasPendingRegistration = (bool) $stmtPendingRegistration->fetchColumn();
+
+        if ($hasPendingRegistration) {
+            return 'Название команды не может быть пустым. Пожалуйста, отправьте текстовое название.';
+        }
+
+        return null;
     }
 
-    $pendingLot = fetch_pending_game_lot($conn, $user_id);
     if ($pendingLot) {
         update_user_status($conn, $user_id, 1);
         save_lot_team_and_request_bet($conn, $config, $chat_id, $user_id, $pendingLot, $userInput);
