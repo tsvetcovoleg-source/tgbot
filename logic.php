@@ -84,6 +84,14 @@ function handle_start_with_payload($chat_id, $user_id, $conn, $config, $payload,
         return handle_quest_games_command($chat_id, $user_id, $conn, $config);
     }
 
+    if ($payload === 'music') {
+        if ($telegramMessageId) {
+            delete_message_silently($config, $chat_id, $telegramMessageId);
+        }
+
+        return handle_music_games_command($chat_id, $user_id, $conn, $config);
+    }
+
     if (strpos($payload, 'register_') === 0) {
         $game_id = (int) mb_substr($payload, mb_strlen('register_'));
         if ($game_id > 0) {
@@ -217,6 +225,11 @@ function handle_detective_games_command($chat_id, $user_id, $conn, $config)
 function handle_quest_games_command($chat_id, $user_id, $conn, $config)
 {
     return handle_games_by_types($chat_id, $user_id, $conn, $config, ['quest'], 'Список ближайших игр:', 'Пока нет активных квестов 😢');
+}
+
+function handle_music_games_command($chat_id, $user_id, $conn, $config)
+{
+    return handle_games_by_types($chat_id, $user_id, $conn, $config, ['music'], 'Список ближайших игр:', 'Пока нет активных музыкальных игр 😢');
 }
 
 function handle_register_button($data, $chat_id, $user_id, $conn, $config, $callback, $prefetchedGame = null) {

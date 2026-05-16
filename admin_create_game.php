@@ -54,6 +54,7 @@ render_admin_layout_start('Создать игру — Админка', 'create'
                 <option value="lightquiz" <?php echo $prefill['type'] === 'lightquiz' ? 'selected' : ''; ?>>lightquiz</option>
                 <option value="detective" <?php echo $prefill['type'] === 'detective' ? 'selected' : ''; ?>>detective</option>
                 <option value="quest" <?php echo $prefill['type'] === 'quest' ? 'selected' : ''; ?>>quest</option>
+                <option value="music" <?php echo $prefill['type'] === 'music' ? 'selected' : ''; ?>>music</option>
             </select>
 
             <label for="status">Статус регистрации</label>
