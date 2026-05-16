@@ -120,7 +120,13 @@ if (!$message) exit;
 
 $tg_user = $message['from'];
 $chat_id = $tg_user['id'];
-$text = trim($message['text'] ?? '');
+$rawText = $message['text'] ?? null;
+if (!is_string($rawText)) {
+    http_response_code(200);
+    exit;
+}
+
+$text = trim($rawText);
 $telegram_message_id = $message['message_id'] ?? null;
 
 $isNewUser = false;
