@@ -283,6 +283,7 @@ render_admin_layout_start('Детали игры — Админка', 'games', '
                     <option value="lightquiz" <?php echo $game['type'] === 'lightquiz' ? 'selected' : ''; ?>>lightquiz</option>
                     <option value="detective" <?php echo $game['type'] === 'detective' ? 'selected' : ''; ?>>detective</option>
                     <option value="quest" <?php echo $game['type'] === 'quest' ? 'selected' : ''; ?>>quest</option>
+                    <option value="music" <?php echo $game['type'] === 'music' ? 'selected' : ''; ?>>music</option>
                 </select>
 
                 <label for="edit_status">Статус регистрации</label>

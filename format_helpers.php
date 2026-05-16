@@ -2,7 +2,7 @@
 
 function get_known_game_formats(): array
 {
-    return ['quiz', 'lightquiz', 'detective', 'quest'];
+    return ['quiz', 'lightquiz', 'detective', 'quest', 'music'];
 }
 
 function get_game_format_definitions(): array
@@ -25,6 +25,12 @@ function get_game_format_definitions(): array
             'description' => 'Авто-квест — это динамичная городская игра, где вы разгадываете загадки, находите точки по городу и выполняете задания в реальном времени. Много движения, драйва и эмоций!',
             'link_text' => '👉 Узнать, когда ближайший авто-квест',
             'start_payload' => 'quest'
+        ],
+        'music' => [
+            'title' => '🎵 Музыкальные игры',
+            'description' => 'Музыкальные игры — это командный формат, где вас ждут хиты разных лет, необычные музыкальные задания, атмосфера вечеринки и море эмоций. Угадывайте песни, исполнителей, каверы, переводы и музыкальные ребусы, подпевайте любимым трекам и соревнуйтесь с другими командами в самом драйвовом формате наших игр!',
+            'link_text' => '👉 Узнать, когда ближайшая музыкальная игра',
+            'start_payload' => 'music'
         ],
     ];
 }
@@ -58,6 +64,8 @@ function get_format_display_name(string $format): string
             return 'Saint Twins Detective';
         case 'quest':
             return 'автоквеста';
+        case 'music':
+            return 'музыкальной игры';
         default:
             return 'этого формата';
     }
