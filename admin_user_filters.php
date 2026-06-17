@@ -65,7 +65,7 @@ $messageDateSelect = $messageDateColumn !== null
 $saintTwinsPrefix = 'Я хочу зарегистрироваться на игру «Saint Twins Detective';
 $vibeQuizPrefix = 'Я хочу зарегистрироваться на игру «Vibe Quiz';
 $questPrefix = 'Я хочу зарегистрироваться на игру «Квест';
-$questQuizPrefix = 'Я хочу зарегистрироваться на игру «Квест Quiz';
+$questInterestPrefix = 'Я хочу зарегистрироваться на игру «Квест';
 $adult18Prefix = 'Я хочу зарегистрироваться на игру «Pub Quiz 18+';
 $quizBetPattern = '^/start [0-9]+_lot';
 $firstMessageJoin = '
@@ -105,7 +105,7 @@ $specialCountStmt = $conn->prepare(
 $specialCountStmt->execute([
     ':visited_quiz_bets_pattern' => $quizBetPattern,
     ':interested_vibe_quiz_pattern' => $vibeQuizPrefix . '%',
-    ':interested_quest_pattern' => $questQuizPrefix . '%',
+    ':interested_quest_pattern' => $questInterestPrefix . '%',
 ]);
 $specialCounts = $specialCountStmt->fetch(PDO::FETCH_ASSOC) ?: [];
 $specialFilterOptions = [
@@ -252,7 +252,7 @@ function append_first_entry_filters(array &$whereParts, array &$params, array $f
     }
 }
 
-function append_special_filters(array &$whereParts, array &$params, array $filters, string $mode, string $quizBetPattern, string $vibeQuizPrefix, string $questQuizPrefix): void
+function append_special_filters(array &$whereParts, array &$params, array $filters, string $mode, string $quizBetPattern, string $vibeQuizPrefix, string $questInterestPrefix): void
 {
     foreach ($filters as $filter) {
         $existsSql = '';
@@ -265,7 +265,7 @@ function append_special_filters(array &$whereParts, array &$params, array $filte
             $params[$placeholder] = $vibeQuizPrefix . '%';
         } elseif ($filter === 'interested_quest') {
             $existsSql = 'EXISTS (SELECT 1 FROM messages special_quest_message WHERE special_quest_message.user_id = u.id AND special_quest_message.from_bot = 0 AND special_quest_message.message LIKE ' . $placeholder . ')';
-            $params[$placeholder] = $questQuizPrefix . '%';
+            $params[$placeholder] = $questInterestPrefix . '%';
         }
 
         if ($existsSql !== '') {
@@ -295,8 +295,8 @@ $whereParts = [];
 $params = [];
 append_first_entry_filters($whereParts, $params, $firstEntryIncludeFilters, 'include', $saintTwinsPrefix, $vibeQuizPrefix, $questPrefix, $quizBetPattern, $adult18Prefix);
 append_first_entry_filters($whereParts, $params, $firstEntryExcludeFilters, 'exclude', $saintTwinsPrefix, $vibeQuizPrefix, $questPrefix, $quizBetPattern, $adult18Prefix);
-append_special_filters($whereParts, $params, $specialIncludeFilters, 'include', $quizBetPattern, $vibeQuizPrefix, $questQuizPrefix);
-append_special_filters($whereParts, $params, $specialExcludeFilters, 'exclude', $quizBetPattern, $vibeQuizPrefix, $questQuizPrefix);
+append_special_filters($whereParts, $params, $specialIncludeFilters, 'include', $quizBetPattern, $vibeQuizPrefix, $questInterestPrefix);
+append_special_filters($whereParts, $params, $specialExcludeFilters, 'exclude', $quizBetPattern, $vibeQuizPrefix, $questInterestPrefix);
 
 if ($messageDateColumn !== null) {
     append_month_filters($whereParts, $params, $firstMessageIncludeMonths, "DATE_FORMAT(first_user_message.first_message_created_at, '%Y-%m')", 'first_message_month', 'include');
@@ -330,7 +330,7 @@ $userStmt = $conn->prepare(
 );
 $params[':label_visited_quiz_bets_pattern'] = $quizBetPattern;
 $params[':label_interested_vibe_quiz_pattern'] = $vibeQuizPrefix . '%';
-$params[':label_interested_quest_pattern'] = $questQuizPrefix . '%';
+$params[':label_interested_quest_pattern'] = $questInterestPrefix . '%';
 $userStmt->execute($params);
 $users = $userStmt->fetchAll(PDO::FETCH_ASSOC);
 

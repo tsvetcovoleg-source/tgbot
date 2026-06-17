@@ -103,7 +103,7 @@ function render_admin_layout_start(string $title, string $activeNav, string $hea
             .dialogue-empty { color: #666; text-align: center; padding: 20px; }
             .section-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
             .filters-layout { display: grid; grid-template-columns: minmax(300px, 380px) 1fr; gap: 20px; align-items: start; }
-            .filters-sidebar { position: sticky; top: 16px; border: 1px solid #dbe4f0; border-radius: 18px; padding: 16px; background: linear-gradient(180deg, #f8fbff 0%, #fff 100%); display: flex; flex-direction: column; gap: 14px; box-shadow: 0 10px 30px rgba(15, 23, 42, 0.06); }
+            .filters-sidebar { position: sticky; top: 16px; max-height: calc(100vh - 32px); overflow-y: auto; border: 1px solid #dbe4f0; border-radius: 18px; padding: 16px; background: linear-gradient(180deg, #f8fbff 0%, #fff 100%); display: flex; flex-direction: column; gap: 14px; box-shadow: 0 10px 30px rgba(15, 23, 42, 0.06); }
             .filter-hint { border: 1px dashed #bfdbfe; border-radius: 12px; padding: 10px 12px; background: #eff6ff; color: #1e40af; line-height: 1.35; }
             .filter-group { border: 1px solid #e2e8f0; border-radius: 14px; padding: 12px; margin: 0; background: #fff; }
             .filter-group legend { padding: 0 8px; font-weight: 800; color: #0f172a; }
