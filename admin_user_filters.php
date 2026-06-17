@@ -307,7 +307,19 @@ if ($messageDateColumn !== null) {
 
 $whereSql = $whereParts === [] ? '' : ' WHERE ' . implode(' AND ', $whereParts);
 $userStmt = $conn->prepare(
-    'SELECT u.id, u.telegram_id, u.first_name, u.last_name, u.username, first_user_message.first_message, first_user_message.first_message_created_at, lm.last_message_id
+    'SELECT
+         u.id,
+         u.telegram_id,
+         u.first_name,
+         u.last_name,
+         u.username,
+         first_user_message.first_message,
+         first_user_message.first_message_created_at,
+         last_user_message.last_message_created_at,
+         lm.last_message_id,
+         EXISTS (SELECT 1 FROM messages quiz_bet_message WHERE quiz_bet_message.user_id = u.id AND quiz_bet_message.from_bot = 0 AND quiz_bet_message.message REGEXP :label_visited_quiz_bets_pattern) AS has_visited_quiz_bets,
+         EXISTS (SELECT 1 FROM messages vibe_quiz_message WHERE vibe_quiz_message.user_id = u.id AND vibe_quiz_message.from_bot = 0 AND vibe_quiz_message.message LIKE :label_interested_vibe_quiz_pattern) AS has_interested_vibe_quiz,
+         EXISTS (SELECT 1 FROM messages quest_message WHERE quest_message.user_id = u.id AND quest_message.from_bot = 0 AND quest_message.message LIKE :label_interested_quest_pattern) AS has_interested_quest
      FROM users u' . $firstMessageJoin . $lastMessageJoin . '
      LEFT JOIN (
          SELECT user_id, MAX(id) AS last_message_id
@@ -316,6 +328,9 @@ $userStmt = $conn->prepare(
      ) lm ON lm.user_id = u.id' . $whereSql . '
      ORDER BY lm.last_message_id DESC, u.id DESC'
 );
+$params[':label_visited_quiz_bets_pattern'] = $quizBetPattern;
+$params[':label_interested_vibe_quiz_pattern'] = $vibeQuizPrefix . '%';
+$params[':label_interested_quest_pattern'] = $questQuizPrefix . '%';
 $userStmt->execute($params);
 $users = $userStmt->fetchAll(PDO::FETCH_ASSOC);
 
@@ -350,6 +365,52 @@ function render_filter_user_label(array $user): string
     $label .= ' – ' . ($user['telegram_id'] ?? '');
 
     return $label;
+}
+
+function filter_text_starts_with(string $text, string $prefix): bool
+{
+    return substr($text, 0, strlen($prefix)) === $prefix;
+}
+
+function render_user_filter_labels(array $user, string $saintTwinsPrefix, string $vibeQuizPrefix, string $questPrefix, string $adult18Prefix, string $quizBetPattern): array
+{
+    $labels = [];
+    $firstMessage = trim($user['first_message'] ?? '');
+
+    if ($firstMessage === '') {
+        $labels[] = 'Первый вход: другое';
+    } elseif (filter_text_starts_with($firstMessage, $saintTwinsPrefix)) {
+        $labels[] = 'Первый вход: Saint Twins Detective';
+    } elseif (filter_text_starts_with($firstMessage, $vibeQuizPrefix)) {
+        $labels[] = 'Первый вход: Vibe Quiz';
+    } elseif (filter_text_starts_with($firstMessage, $questPrefix)) {
+        $labels[] = 'Первый вход: квест';
+    } elseif (preg_match('/' . str_replace('/', '\/', $quizBetPattern) . '/', $firstMessage) === 1) {
+        $labels[] = 'Первый вход: ставка на квизе';
+    } elseif (filter_text_starts_with($firstMessage, $adult18Prefix)) {
+        $labels[] = 'Первый вход: 18+';
+    } else {
+        $labels[] = 'Первый вход: другое';
+    }
+
+    if (!empty($user['has_visited_quiz_bets'])) {
+        $labels[] = 'Заходил в ставки на квизе';
+    }
+    if (!empty($user['has_interested_vibe_quiz'])) {
+        $labels[] = 'Интересовался Vibe Quiz';
+    }
+    if (!empty($user['has_interested_quest'])) {
+        $labels[] = 'Интересовался квестом';
+    }
+
+    if (!empty($user['first_message_created_at'])) {
+        $labels[] = 'Первое сообщение: ' . substr((string) $user['first_message_created_at'], 0, 7);
+    }
+    if (!empty($user['last_message_created_at'])) {
+        $labels[] = 'Последнее сообщение: ' . substr((string) $user['last_message_created_at'], 0, 7);
+    }
+
+    return $labels;
 }
 
 render_admin_layout_start('Фильтр пользователей — Админка', 'user-filters', 'Фильтр пользователей');
@@ -440,11 +501,11 @@ render_admin_layout_start('Фильтр пользователей — Адми�
                     <?php foreach ($users as $user): ?>
                         <?php
                             $label = render_filter_user_label($user);
-                            $firstMessage = trim($user['first_message'] ?? '');
+                            $filterLabels = render_user_filter_labels($user, $saintTwinsPrefix, $vibeQuizPrefix, $questPrefix, $adult18Prefix, $quizBetPattern);
                         ?>
                         <a class="filtered-user" href="admin_dialogues.php?user_id=<?php echo (int) $user['id']; ?>">
                             <strong><?php echo htmlspecialchars($label); ?></strong>
-                            <span class="muted-small">Первое сообщение: <?php echo htmlspecialchars($firstMessage !== '' ? $firstMessage : 'нет пользовательских сообщений'); ?></span>
+                            <span class="muted-small">Метки: <?php echo htmlspecialchars(implode(' · ', $filterLabels)); ?></span>
                         </a>
                     <?php endforeach; ?>
                 </div>
