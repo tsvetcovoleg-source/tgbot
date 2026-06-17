@@ -4,12 +4,13 @@ require_once __DIR__ . '/admin_shared.php';
 [$conn] = bootstrap_admin();
 
 $firstEntryFilters = isset($_GET['first_entry']) && is_array($_GET['first_entry'])
-    ? array_values(array_intersect($_GET['first_entry'], ['saint_twins_detective', 'vibe_quiz', 'quest', 'quiz_bet', 'other']))
+    ? array_values(array_intersect($_GET['first_entry'], ['saint_twins_detective', 'vibe_quiz', 'quest', 'quiz_bet', 'adult_18', 'other']))
     : [];
 
 $saintTwinsPrefix = 'Я хочу зарегистрироваться на игру «Saint Twins Detective';
 $vibeQuizPrefix = 'Я хочу зарегистрироваться на игру «Vibe Quiz';
 $questPrefix = 'Я хочу зарегистрироваться на игру «Квест';
+$adult18Prefix = 'Я хочу зарегистрироваться на игру «Pub Quiz 18+';
 $quizBetPattern = '^/start [0-9]+_lot';
 $firstMessageJoin = '
     LEFT JOIN (
@@ -30,7 +31,8 @@ $countStmt = $conn->prepare(
         SUM(CASE WHEN first_user_message.first_message LIKE :count_vibe_quiz_pattern THEN 1 ELSE 0 END) AS vibe_quiz_count,
         SUM(CASE WHEN first_user_message.first_message LIKE :count_quest_pattern THEN 1 ELSE 0 END) AS quest_count,
         SUM(CASE WHEN first_user_message.first_message REGEXP :count_quiz_bet_pattern THEN 1 ELSE 0 END) AS quiz_bet_count,
-        SUM(CASE WHEN first_user_message.first_message IS NULL OR (first_user_message.first_message NOT LIKE :count_other_saint_twins_pattern AND first_user_message.first_message NOT LIKE :count_other_vibe_quiz_pattern AND first_user_message.first_message NOT LIKE :count_other_quest_pattern AND first_user_message.first_message NOT REGEXP :count_other_quiz_bet_pattern) THEN 1 ELSE 0 END) AS other_count,
+        SUM(CASE WHEN first_user_message.first_message LIKE :count_adult_18_pattern THEN 1 ELSE 0 END) AS adult_18_count,
+        SUM(CASE WHEN first_user_message.first_message IS NULL OR (first_user_message.first_message NOT LIKE :count_other_saint_twins_pattern AND first_user_message.first_message NOT LIKE :count_other_vibe_quiz_pattern AND first_user_message.first_message NOT LIKE :count_other_quest_pattern AND first_user_message.first_message NOT REGEXP :count_other_quiz_bet_pattern AND first_user_message.first_message NOT LIKE :count_other_adult_18_pattern) THEN 1 ELSE 0 END) AS other_count,
         COUNT(*) AS total_count
      FROM users u' . $firstMessageJoin
 );
@@ -39,10 +41,12 @@ $countStmt->execute([
     ':count_vibe_quiz_pattern' => $vibeQuizPrefix . '%',
     ':count_quest_pattern' => $questPrefix . '%',
     ':count_quiz_bet_pattern' => $quizBetPattern,
+    ':count_adult_18_pattern' => $adult18Prefix . '%',
     ':count_other_saint_twins_pattern' => $saintTwinsPrefix . '%',
     ':count_other_vibe_quiz_pattern' => $vibeQuizPrefix . '%',
     ':count_other_quest_pattern' => $questPrefix . '%',
     ':count_other_quiz_bet_pattern' => $quizBetPattern,
+    ':count_other_adult_18_pattern' => $adult18Prefix . '%',
 ]);
 $counts = $countStmt->fetch(PDO::FETCH_ASSOC) ?: [];
 
@@ -66,12 +70,17 @@ if ($firstEntryFilters !== []) {
         $filterParts[] = 'first_user_message.first_message REGEXP :filter_quiz_bet_pattern';
         $params[':filter_quiz_bet_pattern'] = $quizBetPattern;
     }
+    if (in_array('adult_18', $firstEntryFilters, true)) {
+        $filterParts[] = 'first_user_message.first_message LIKE :filter_adult_18_pattern';
+        $params[':filter_adult_18_pattern'] = $adult18Prefix . '%';
+    }
     if (in_array('other', $firstEntryFilters, true)) {
-        $filterParts[] = '(first_user_message.first_message IS NULL OR (first_user_message.first_message NOT LIKE :filter_other_saint_twins_pattern AND first_user_message.first_message NOT LIKE :filter_other_vibe_quiz_pattern AND first_user_message.first_message NOT LIKE :filter_other_quest_pattern AND first_user_message.first_message NOT REGEXP :filter_other_quiz_bet_pattern))';
+        $filterParts[] = '(first_user_message.first_message IS NULL OR (first_user_message.first_message NOT LIKE :filter_other_saint_twins_pattern AND first_user_message.first_message NOT LIKE :filter_other_vibe_quiz_pattern AND first_user_message.first_message NOT LIKE :filter_other_quest_pattern AND first_user_message.first_message NOT REGEXP :filter_other_quiz_bet_pattern AND first_user_message.first_message NOT LIKE :filter_other_adult_18_pattern))';
         $params[':filter_other_saint_twins_pattern'] = $saintTwinsPrefix . '%';
         $params[':filter_other_vibe_quiz_pattern'] = $vibeQuizPrefix . '%';
         $params[':filter_other_quest_pattern'] = $questPrefix . '%';
         $params[':filter_other_quiz_bet_pattern'] = $quizBetPattern;
+        $params[':filter_other_adult_18_pattern'] = $adult18Prefix . '%';
     }
     if ($filterParts !== []) {
         $whereParts[] = '(' . implode(' OR ', $filterParts) . ')';
@@ -135,6 +144,10 @@ render_admin_layout_start('Фильтр пользователей — Адми�
                     <label class="checkbox-row">
                         <input type="checkbox" name="first_entry[]" value="quiz_bet"<?php echo user_filter_checked($firstEntryFilters, 'quiz_bet'); ?>>
                         <span>Ставка на квизе (<?php echo (int) ($counts['quiz_bet_count'] ?? 0); ?>)</span>
+                    </label>
+                    <label class="checkbox-row">
+                        <input type="checkbox" name="first_entry[]" value="adult_18"<?php echo user_filter_checked($firstEntryFilters, 'adult_18'); ?>>
+                        <span>18+ (<?php echo (int) ($counts['adult_18_count'] ?? 0); ?>)</span>
                     </label>
                     <label class="checkbox-row">
                         <input type="checkbox" name="first_entry[]" value="other"<?php echo user_filter_checked($firstEntryFilters, 'other'); ?>>
