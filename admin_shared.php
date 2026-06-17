@@ -102,16 +102,29 @@ function render_admin_layout_start(string $title, string $activeNav, string $hea
             .bubble.bot { background: #ecfdf3; margin-left: auto; }
             .dialogue-empty { color: #666; text-align: center; padding: 20px; }
             .section-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
-            .filters-layout { display: grid; grid-template-columns: minmax(240px, 320px) 1fr; gap: 18px; align-items: start; }
-            .filters-sidebar { border: 1px solid var(--border); border-radius: 12px; padding: 14px; background: #f8fafc; display: flex; flex-direction: column; gap: 14px; }
-            .filter-group { border: 1px solid var(--border); border-radius: 10px; padding: 12px; margin: 0; background: #fff; }
-            .filter-group legend { padding: 0 6px; font-weight: 700; }
-            .checkbox-row { display: flex; align-items: center; gap: 8px; margin: 10px 0 0; font-weight: 400; }
-            .checkbox-row input { width: auto; }
+            .filters-layout { display: grid; grid-template-columns: minmax(300px, 380px) 1fr; gap: 20px; align-items: start; }
+            .filters-sidebar { position: sticky; top: 16px; max-height: calc(100vh - 32px); overflow-y: auto; border: 1px solid #dbe4f0; border-radius: 18px; padding: 16px; background: linear-gradient(180deg, #f8fbff 0%, #fff 100%); display: flex; flex-direction: column; gap: 14px; box-shadow: 0 10px 30px rgba(15, 23, 42, 0.06); }
+            .filter-group { border: 1px solid #e2e8f0; border-radius: 14px; padding: 12px; margin: 0; background: #fff; }
+            .filter-group legend { padding: 0 8px; font-weight: 800; color: #0f172a; }
+            .checkbox-row, .filter-choice { display: flex; align-items: center; gap: 8px; margin: 10px 0 0; font-weight: 400; }
+            .checkbox-row input, .filter-choice input { width: auto; }
+            .filter-choice { justify-content: space-between; gap: 12px; border: 1px solid #eef2f7; border-radius: 12px; padding: 8px; background: #f8fafc; }
+            .filter-choice-main { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+            .filter-choice-title { font-weight: 700; color: #0f172a; }
+            .filter-choice-count { font-size: 12px; color: #64748b; }
+            .filter-choice-actions { display: inline-flex; gap: 6px; flex-shrink: 0; }
+            .filter-toggle { display: inline-flex; align-items: center; justify-content: center; gap: 4px; margin: 0; min-width: 38px; padding: 6px 8px; border: 1px solid #cbd5e1; border-radius: 999px; background: #fff; color: #475569; font-size: 12px; font-weight: 800; cursor: pointer; }
+            .filter-toggle input { margin: 0; accent-color: var(--blue); }
+            .filter-toggle.include { border-color: #bbf7d0; background: #f0fdf4; color: #166534; }
+            .filter-toggle.exclude { border-color: #fecaca; background: #fef2f2; color: #991b1b; }
+            .filter-toggle:has(input:checked) { box-shadow: 0 0 0 2px rgba(0, 102, 255, 0.18); }
             .filtered-users { min-width: 0; }
-            .filtered-user-list { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
-            .filtered-user { border: 1px solid var(--border); border-radius: 10px; padding: 12px; background: #fff; text-decoration: none; color: #0f172a; display: flex; flex-direction: column; gap: 6px; }
-            .filtered-user:hover { border-color: var(--blue); background: #f0f6ff; }
+            .filtered-user-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; margin-top: 12px; }
+            .filtered-user { border: 1px solid #e2e8f0; border-radius: 16px; padding: 14px; background: #fff; text-decoration: none; color: #0f172a; display: flex; flex-direction: column; gap: 10px; box-shadow: 0 8px 22px rgba(15, 23, 42, 0.05); }
+            .filtered-user:hover { border-color: var(--blue); background: #f8fbff; transform: translateY(-1px); }
+            .filter-label-list { display: flex; flex-wrap: wrap; gap: 6px; }
+            .user-filter-label { display: inline-flex; align-items: center; width: fit-content; border-radius: 999px; padding: 4px 8px; background: #eef2ff; color: #3730a3; font-size: 12px; font-weight: 700; }
+            @media (max-width: 900px) { .filters-layout { grid-template-columns: 1fr; } .filters-sidebar { position: static; } }
         </style>
     </head>
     <body>

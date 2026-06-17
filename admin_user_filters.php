@@ -3,19 +3,47 @@ require_once __DIR__ . '/admin_shared.php';
 
 [$conn] = bootstrap_admin();
 
-$firstEntryFilters = isset($_GET['first_entry']) && is_array($_GET['first_entry'])
-    ? array_values(array_intersect($_GET['first_entry'], ['saint_twins_detective', 'vibe_quiz', 'quest', 'quiz_bet', 'adult_18', 'other']))
-    : [];
-$firstMessageMonths = isset($_GET['first_message_month']) && is_array($_GET['first_message_month'])
-    ? array_values(array_filter($_GET['first_message_month'], static function (string $month): bool {
+function read_filter_values(string $name, array $allowedValues, array $fallbackNames = []): array
+{
+    $values = [];
+    $names = array_merge([$name], $fallbackNames);
+
+    foreach ($names as $requestName) {
+        if (isset($_GET[$requestName]) && is_array($_GET[$requestName])) {
+            $values = array_merge($values, $_GET[$requestName]);
+        }
+    }
+
+    return array_values(array_unique(array_intersect($values, $allowedValues)));
+}
+
+function read_month_filter_values(string $name, array $fallbackNames = []): array
+{
+    $values = [];
+    $names = array_merge([$name], $fallbackNames);
+
+    foreach ($names as $requestName) {
+        if (isset($_GET[$requestName]) && is_array($_GET[$requestName])) {
+            $values = array_merge($values, $_GET[$requestName]);
+        }
+    }
+
+    return array_values(array_unique(array_filter($values, static function (string $month): bool {
         return preg_match('/^\d{4}-\d{2}$/', $month) === 1;
-    }))
-    : [];
-$lastMessageMonths = isset($_GET['last_message_month']) && is_array($_GET['last_message_month'])
-    ? array_values(array_filter($_GET['last_message_month'], static function (string $month): bool {
-        return preg_match('/^\d{4}-\d{2}$/', $month) === 1;
-    }))
-    : [];
+    })));
+}
+
+$firstEntryFilterValues = ['saint_twins_detective', 'vibe_quiz', 'quest', 'quiz_bet', 'adult_18', 'other'];
+$specialFilterValues = ['visited_quiz_bets', 'interested_vibe_quiz', 'interested_quest'];
+
+$firstEntryIncludeFilters = read_filter_values('first_entry_include', $firstEntryFilterValues, ['first_entry']);
+$firstEntryExcludeFilters = read_filter_values('first_entry_exclude', $firstEntryFilterValues);
+$firstMessageIncludeMonths = read_month_filter_values('first_message_month_include', ['first_message_month']);
+$firstMessageExcludeMonths = read_month_filter_values('first_message_month_exclude');
+$lastMessageIncludeMonths = read_month_filter_values('last_message_month_include', ['last_message_month']);
+$lastMessageExcludeMonths = read_month_filter_values('last_message_month_exclude');
+$specialIncludeFilters = read_filter_values('special_filter_include', $specialFilterValues, ['special_filter']);
+$specialExcludeFilters = read_filter_values('special_filter_exclude', $specialFilterValues);
 
 function get_message_date_column(PDO $conn): ?string
 {
@@ -37,6 +65,7 @@ $messageDateSelect = $messageDateColumn !== null
 $saintTwinsPrefix = 'Я хочу зарегистрироваться на игру «Saint Twins Detective';
 $vibeQuizPrefix = 'Я хочу зарегистрироваться на игру «Vibe Quiz';
 $questPrefix = 'Я хочу зарегистрироваться на игру «Квест';
+$questInterestPrefix = 'Я хочу зарегистрироваться на игру «Квест';
 $adult18Prefix = 'Я хочу зарегистрироваться на игру «Pub Quiz 18+';
 $quizBetPattern = '^/start [0-9]+_lot';
 $firstMessageJoin = '
@@ -63,6 +92,39 @@ $lastMessageJoin = '
         ) lm ON lm.user_id = m.user_id AND lm.last_message_id = m.id
     ) last_user_message ON last_user_message.user_id = u.id
 ';
+
+$specialCountStmt = $conn->prepare(
+    'SELECT
+        COUNT(DISTINCT CASE WHEN m.message REGEXP :visited_quiz_bets_pattern THEN u.id END) AS visited_quiz_bets_count,
+        COUNT(DISTINCT CASE WHEN m.message LIKE :interested_vibe_quiz_pattern THEN u.id END) AS interested_vibe_quiz_count,
+        COUNT(DISTINCT CASE WHEN m.message LIKE :interested_quest_pattern THEN u.id END) AS interested_quest_count
+     FROM users u
+     INNER JOIN messages m ON m.user_id = u.id
+     WHERE m.from_bot = 0'
+);
+$specialCountStmt->execute([
+    ':visited_quiz_bets_pattern' => $quizBetPattern,
+    ':interested_vibe_quiz_pattern' => $vibeQuizPrefix . '%',
+    ':interested_quest_pattern' => $questInterestPrefix . '%',
+]);
+$specialCounts = $specialCountStmt->fetch(PDO::FETCH_ASSOC) ?: [];
+$specialFilterOptions = [
+    [
+        'value' => 'visited_quiz_bets',
+        'label' => 'Заходили в ставки на квизе',
+        'count' => (int) ($specialCounts['visited_quiz_bets_count'] ?? 0),
+    ],
+    [
+        'value' => 'interested_vibe_quiz',
+        'label' => 'Интересовались Vibe Quiz',
+        'count' => (int) ($specialCounts['interested_vibe_quiz_count'] ?? 0),
+    ],
+    [
+        'value' => 'interested_quest',
+        'label' => 'Интересовались Квестом',
+        'count' => (int) ($specialCounts['interested_quest_count'] ?? 0),
+    ],
+];
 
 $countStmt = $conn->prepare(
     'SELECT
@@ -147,66 +209,117 @@ if ($messageDateColumn !== null) {
     $lastMonthOptions = $lastMonthStmt->fetchAll(PDO::FETCH_ASSOC);
 }
 
+function append_first_entry_filters(array &$whereParts, array &$params, array $filters, string $mode, string $saintTwinsPrefix, string $vibeQuizPrefix, string $questPrefix, string $quizBetPattern, string $adult18Prefix): void
+{
+    if ($filters === []) {
+        return;
+    }
+
+    $filterParts = [];
+    $paramPrefix = ':filter_' . $mode . '_';
+    if (in_array('saint_twins_detective', $filters, true)) {
+        $filterParts[] = 'COALESCE(first_user_message.first_message LIKE ' . $paramPrefix . 'saint_twins_pattern, 0)';
+        $params[$paramPrefix . 'saint_twins_pattern'] = $saintTwinsPrefix . '%';
+    }
+    if (in_array('vibe_quiz', $filters, true)) {
+        $filterParts[] = 'COALESCE(first_user_message.first_message LIKE ' . $paramPrefix . 'vibe_quiz_pattern, 0)';
+        $params[$paramPrefix . 'vibe_quiz_pattern'] = $vibeQuizPrefix . '%';
+    }
+    if (in_array('quest', $filters, true)) {
+        $filterParts[] = 'COALESCE(first_user_message.first_message LIKE ' . $paramPrefix . 'quest_pattern, 0)';
+        $params[$paramPrefix . 'quest_pattern'] = $questPrefix . '%';
+    }
+    if (in_array('quiz_bet', $filters, true)) {
+        $filterParts[] = 'COALESCE(first_user_message.first_message REGEXP ' . $paramPrefix . 'quiz_bet_pattern, 0)';
+        $params[$paramPrefix . 'quiz_bet_pattern'] = $quizBetPattern;
+    }
+    if (in_array('adult_18', $filters, true)) {
+        $filterParts[] = 'COALESCE(first_user_message.first_message LIKE ' . $paramPrefix . 'adult_18_pattern, 0)';
+        $params[$paramPrefix . 'adult_18_pattern'] = $adult18Prefix . '%';
+    }
+    if (in_array('other', $filters, true)) {
+        $filterParts[] = '(first_user_message.first_message IS NULL OR (first_user_message.first_message NOT LIKE ' . $paramPrefix . 'other_saint_twins_pattern AND first_user_message.first_message NOT LIKE ' . $paramPrefix . 'other_vibe_quiz_pattern AND first_user_message.first_message NOT LIKE ' . $paramPrefix . 'other_quest_pattern AND first_user_message.first_message NOT REGEXP ' . $paramPrefix . 'other_quiz_bet_pattern AND first_user_message.first_message NOT LIKE ' . $paramPrefix . 'other_adult_18_pattern))';
+        $params[$paramPrefix . 'other_saint_twins_pattern'] = $saintTwinsPrefix . '%';
+        $params[$paramPrefix . 'other_vibe_quiz_pattern'] = $vibeQuizPrefix . '%';
+        $params[$paramPrefix . 'other_quest_pattern'] = $questPrefix . '%';
+        $params[$paramPrefix . 'other_quiz_bet_pattern'] = $quizBetPattern;
+        $params[$paramPrefix . 'other_adult_18_pattern'] = $adult18Prefix . '%';
+    }
+
+    if ($filterParts !== []) {
+        $condition = '(' . implode(' OR ', $filterParts) . ')';
+        $whereParts[] = $mode === 'exclude' ? 'NOT ' . $condition : $condition;
+    }
+}
+
+function append_special_filters(array &$whereParts, array &$params, array $filters, string $mode, string $quizBetPattern, string $vibeQuizPrefix, string $questInterestPrefix): void
+{
+    foreach ($filters as $filter) {
+        $existsSql = '';
+        $placeholder = ':special_' . $mode . '_' . $filter . '_pattern';
+        if ($filter === 'visited_quiz_bets') {
+            $existsSql = 'EXISTS (SELECT 1 FROM messages special_quiz_bet_message WHERE special_quiz_bet_message.user_id = u.id AND special_quiz_bet_message.from_bot = 0 AND special_quiz_bet_message.message REGEXP ' . $placeholder . ')';
+            $params[$placeholder] = $quizBetPattern;
+        } elseif ($filter === 'interested_vibe_quiz') {
+            $existsSql = 'EXISTS (SELECT 1 FROM messages special_vibe_quiz_message WHERE special_vibe_quiz_message.user_id = u.id AND special_vibe_quiz_message.from_bot = 0 AND special_vibe_quiz_message.message LIKE ' . $placeholder . ')';
+            $params[$placeholder] = $vibeQuizPrefix . '%';
+        } elseif ($filter === 'interested_quest') {
+            $existsSql = 'EXISTS (SELECT 1 FROM messages special_quest_message WHERE special_quest_message.user_id = u.id AND special_quest_message.from_bot = 0 AND special_quest_message.message LIKE ' . $placeholder . ')';
+            $params[$placeholder] = $questInterestPrefix . '%';
+        }
+
+        if ($existsSql !== '') {
+            $whereParts[] = $mode === 'exclude' ? 'NOT ' . $existsSql : $existsSql;
+        }
+    }
+}
+
+function append_month_filters(array &$whereParts, array &$params, array $months, string $columnSql, string $paramBase, string $mode): void
+{
+    if ($months === []) {
+        return;
+    }
+
+    $placeholders = [];
+    foreach ($months as $index => $month) {
+        $placeholder = ':' . $paramBase . '_' . $mode . '_' . $index;
+        $placeholders[] = $placeholder;
+        $params[$placeholder] = $month;
+    }
+
+    $condition = $columnSql . ' IN (' . implode(', ', $placeholders) . ')';
+    $whereParts[] = $mode === 'exclude' ? '(' . $columnSql . ' IS NULL OR NOT ' . $condition . ')' : $condition;
+}
+
 $whereParts = [];
 $params = [];
-if ($firstEntryFilters !== []) {
-    $filterParts = [];
-    if (in_array('saint_twins_detective', $firstEntryFilters, true)) {
-        $filterParts[] = 'first_user_message.first_message LIKE :filter_saint_twins_pattern';
-        $params[':filter_saint_twins_pattern'] = $saintTwinsPrefix . '%';
-    }
-    if (in_array('vibe_quiz', $firstEntryFilters, true)) {
-        $filterParts[] = 'first_user_message.first_message LIKE :filter_vibe_quiz_pattern';
-        $params[':filter_vibe_quiz_pattern'] = $vibeQuizPrefix . '%';
-    }
-    if (in_array('quest', $firstEntryFilters, true)) {
-        $filterParts[] = 'first_user_message.first_message LIKE :filter_quest_pattern';
-        $params[':filter_quest_pattern'] = $questPrefix . '%';
-    }
-    if (in_array('quiz_bet', $firstEntryFilters, true)) {
-        $filterParts[] = 'first_user_message.first_message REGEXP :filter_quiz_bet_pattern';
-        $params[':filter_quiz_bet_pattern'] = $quizBetPattern;
-    }
-    if (in_array('adult_18', $firstEntryFilters, true)) {
-        $filterParts[] = 'first_user_message.first_message LIKE :filter_adult_18_pattern';
-        $params[':filter_adult_18_pattern'] = $adult18Prefix . '%';
-    }
-    if (in_array('other', $firstEntryFilters, true)) {
-        $filterParts[] = '(first_user_message.first_message IS NULL OR (first_user_message.first_message NOT LIKE :filter_other_saint_twins_pattern AND first_user_message.first_message NOT LIKE :filter_other_vibe_quiz_pattern AND first_user_message.first_message NOT LIKE :filter_other_quest_pattern AND first_user_message.first_message NOT REGEXP :filter_other_quiz_bet_pattern AND first_user_message.first_message NOT LIKE :filter_other_adult_18_pattern))';
-        $params[':filter_other_saint_twins_pattern'] = $saintTwinsPrefix . '%';
-        $params[':filter_other_vibe_quiz_pattern'] = $vibeQuizPrefix . '%';
-        $params[':filter_other_quest_pattern'] = $questPrefix . '%';
-        $params[':filter_other_quiz_bet_pattern'] = $quizBetPattern;
-        $params[':filter_other_adult_18_pattern'] = $adult18Prefix . '%';
-    }
-    if ($filterParts !== []) {
-        $whereParts[] = '(' . implode(' OR ', $filterParts) . ')';
-    }
-}
+append_first_entry_filters($whereParts, $params, $firstEntryIncludeFilters, 'include', $saintTwinsPrefix, $vibeQuizPrefix, $questPrefix, $quizBetPattern, $adult18Prefix);
+append_first_entry_filters($whereParts, $params, $firstEntryExcludeFilters, 'exclude', $saintTwinsPrefix, $vibeQuizPrefix, $questPrefix, $quizBetPattern, $adult18Prefix);
+append_special_filters($whereParts, $params, $specialIncludeFilters, 'include', $quizBetPattern, $vibeQuizPrefix, $questInterestPrefix);
+append_special_filters($whereParts, $params, $specialExcludeFilters, 'exclude', $quizBetPattern, $vibeQuizPrefix, $questInterestPrefix);
 
-if ($messageDateColumn !== null && $firstMessageMonths !== []) {
-    $monthPlaceholders = [];
-    foreach ($firstMessageMonths as $index => $month) {
-        $placeholder = ':first_message_month_' . $index;
-        $monthPlaceholders[] = $placeholder;
-        $params[$placeholder] = $month;
-    }
-    $whereParts[] = "DATE_FORMAT(first_user_message.first_message_created_at, '%Y-%m') IN (" . implode(', ', $monthPlaceholders) . ')';
-}
-
-if ($messageDateColumn !== null && $lastMessageMonths !== []) {
-    $lastMonthPlaceholders = [];
-    foreach ($lastMessageMonths as $index => $month) {
-        $placeholder = ':last_message_month_' . $index;
-        $lastMonthPlaceholders[] = $placeholder;
-        $params[$placeholder] = $month;
-    }
-    $whereParts[] = "DATE_FORMAT(last_user_message.last_message_created_at, '%Y-%m') IN (" . implode(', ', $lastMonthPlaceholders) . ')';
+if ($messageDateColumn !== null) {
+    append_month_filters($whereParts, $params, $firstMessageIncludeMonths, "DATE_FORMAT(first_user_message.first_message_created_at, '%Y-%m')", 'first_message_month', 'include');
+    append_month_filters($whereParts, $params, $firstMessageExcludeMonths, "DATE_FORMAT(first_user_message.first_message_created_at, '%Y-%m')", 'first_message_month', 'exclude');
+    append_month_filters($whereParts, $params, $lastMessageIncludeMonths, "DATE_FORMAT(last_user_message.last_message_created_at, '%Y-%m')", 'last_message_month', 'include');
+    append_month_filters($whereParts, $params, $lastMessageExcludeMonths, "DATE_FORMAT(last_user_message.last_message_created_at, '%Y-%m')", 'last_message_month', 'exclude');
 }
 
 $whereSql = $whereParts === [] ? '' : ' WHERE ' . implode(' AND ', $whereParts);
 $userStmt = $conn->prepare(
-    'SELECT u.id, u.telegram_id, u.first_name, u.last_name, u.username, first_user_message.first_message, first_user_message.first_message_created_at, lm.last_message_id
+    'SELECT
+         u.id,
+         u.telegram_id,
+         u.first_name,
+         u.last_name,
+         u.username,
+         first_user_message.first_message,
+         first_user_message.first_message_created_at,
+         last_user_message.last_message_created_at,
+         lm.last_message_id,
+         EXISTS (SELECT 1 FROM messages quiz_bet_message WHERE quiz_bet_message.user_id = u.id AND quiz_bet_message.from_bot = 0 AND quiz_bet_message.message REGEXP :label_visited_quiz_bets_pattern) AS has_visited_quiz_bets,
+         EXISTS (SELECT 1 FROM messages vibe_quiz_message WHERE vibe_quiz_message.user_id = u.id AND vibe_quiz_message.from_bot = 0 AND vibe_quiz_message.message LIKE :label_interested_vibe_quiz_pattern) AS has_interested_vibe_quiz,
+         EXISTS (SELECT 1 FROM messages quest_message WHERE quest_message.user_id = u.id AND quest_message.from_bot = 0 AND quest_message.message LIKE :label_interested_quest_pattern) AS has_interested_quest
      FROM users u' . $firstMessageJoin . $lastMessageJoin . '
      LEFT JOIN (
          SELECT user_id, MAX(id) AS last_message_id
@@ -215,12 +328,59 @@ $userStmt = $conn->prepare(
      ) lm ON lm.user_id = u.id' . $whereSql . '
      ORDER BY lm.last_message_id DESC, u.id DESC'
 );
+$params[':label_visited_quiz_bets_pattern'] = $quizBetPattern;
+$params[':label_interested_vibe_quiz_pattern'] = $vibeQuizPrefix . '%';
+$params[':label_interested_quest_pattern'] = $questInterestPrefix . '%';
 $userStmt->execute($params);
 $users = $userStmt->fetchAll(PDO::FETCH_ASSOC);
 
 function user_filter_checked(array $filters, string $value): string
 {
     return in_array($value, $filters, true) ? ' checked' : '';
+}
+
+function render_filter_choice(string $name, array $includeFilters, array $excludeFilters, array $option): void
+{
+    ?>
+    <div class="filter-choice">
+        <div class="filter-choice-main">
+            <span class="filter-choice-title"><?php echo htmlspecialchars($option['label']); ?></span>
+            <span class="filter-choice-count"><?php echo (int) $option['count']; ?> пользователей</span>
+        </div>
+        <div class="filter-choice-actions" aria-label="Режим фильтра">
+            <label class="filter-toggle include" title="Выбрать пользователей с этим признаком">
+                <input type="checkbox" name="<?php echo htmlspecialchars($name); ?>_include[]" value="<?php echo htmlspecialchars($option['value']); ?>"<?php echo user_filter_checked($includeFilters, $option['value']); ?>>
+                +
+            </label>
+            <label class="filter-toggle exclude" title="Исключить пользователей с этим признаком">
+                <input type="checkbox" name="<?php echo htmlspecialchars($name); ?>_exclude[]" value="<?php echo htmlspecialchars($option['value']); ?>"<?php echo user_filter_checked($excludeFilters, $option['value']); ?>>
+                −
+            </label>
+        </div>
+    </div>
+    <?php
+}
+
+function render_month_filter_choice(string $name, string $month, int $count, array $includeMonths, array $excludeMonths): void
+{
+    ?>
+    <div class="filter-choice">
+        <div class="filter-choice-main">
+            <span class="filter-choice-title"><?php echo htmlspecialchars($month); ?></span>
+            <span class="filter-choice-count"><?php echo $count; ?> пользователей</span>
+        </div>
+        <div class="filter-choice-actions" aria-label="Режим фильтра">
+            <label class="filter-toggle include" title="Выбрать пользователей за этот месяц">
+                <input type="checkbox" name="<?php echo htmlspecialchars($name); ?>_include[]" value="<?php echo htmlspecialchars($month); ?>"<?php echo in_array($month, $includeMonths, true) ? ' checked' : ''; ?>>
+                +
+            </label>
+            <label class="filter-toggle exclude" title="Исключить пользователей за этот месяц">
+                <input type="checkbox" name="<?php echo htmlspecialchars($name); ?>_exclude[]" value="<?php echo htmlspecialchars($month); ?>"<?php echo in_array($month, $excludeMonths, true) ? ' checked' : ''; ?>>
+                −
+            </label>
+        </div>
+    </div>
+    <?php
 }
 
 function render_filter_user_label(array $user): string
@@ -234,6 +394,52 @@ function render_filter_user_label(array $user): string
     return $label;
 }
 
+function filter_text_starts_with(string $text, string $prefix): bool
+{
+    return substr($text, 0, strlen($prefix)) === $prefix;
+}
+
+function render_user_filter_labels(array $user, string $saintTwinsPrefix, string $vibeQuizPrefix, string $questPrefix, string $adult18Prefix, string $quizBetPattern): array
+{
+    $labels = [];
+    $firstMessage = trim($user['first_message'] ?? '');
+
+    if ($firstMessage === '') {
+        $labels[] = 'Первый вход: другое';
+    } elseif (filter_text_starts_with($firstMessage, $saintTwinsPrefix)) {
+        $labels[] = 'Первый вход: Saint Twins Detective';
+    } elseif (filter_text_starts_with($firstMessage, $vibeQuizPrefix)) {
+        $labels[] = 'Первый вход: Vibe Quiz';
+    } elseif (filter_text_starts_with($firstMessage, $questPrefix)) {
+        $labels[] = 'Первый вход: квест';
+    } elseif (preg_match('/' . str_replace('/', '\/', $quizBetPattern) . '/', $firstMessage) === 1) {
+        $labels[] = 'Первый вход: ставка на квизе';
+    } elseif (filter_text_starts_with($firstMessage, $adult18Prefix)) {
+        $labels[] = 'Первый вход: 18+';
+    } else {
+        $labels[] = 'Первый вход: другое';
+    }
+
+    if (!empty($user['has_visited_quiz_bets'])) {
+        $labels[] = 'Заходил в ставки на квизе';
+    }
+    if (!empty($user['has_interested_vibe_quiz'])) {
+        $labels[] = 'Интересовался Vibe Quiz';
+    }
+    if (!empty($user['has_interested_quest'])) {
+        $labels[] = 'Интересовался квестом';
+    }
+
+    if (!empty($user['first_message_created_at'])) {
+        $labels[] = 'Первое сообщение: ' . substr((string) $user['first_message_created_at'], 0, 7);
+    }
+    if (!empty($user['last_message_created_at'])) {
+        $labels[] = 'Последнее сообщение: ' . substr((string) $user['last_message_created_at'], 0, 7);
+    }
+
+    return $labels;
+}
+
 render_admin_layout_start('Фильтр пользователей — Админка', 'user-filters', 'Фильтр пользователей');
 ?>
     <div class="card">
@@ -243,14 +449,17 @@ render_admin_layout_start('Фильтр пользователей — Адми�
                     <h2>Фильтры</h2>
                     <button type="submit">Применить</button>
                 </div>
+                <fieldset class="filter-group">
+                    <legend>Специальные фильтры</legend>
+                    <?php foreach ($specialFilterOptions as $option): ?>
+                        <?php render_filter_choice('special_filter', $specialIncludeFilters, $specialExcludeFilters, $option); ?>
+                    <?php endforeach; ?>
+                </fieldset>
 
                 <fieldset class="filter-group">
                     <legend>Первый вход</legend>
                     <?php foreach ($firstEntryOptions as $option): ?>
-                        <label class="checkbox-row">
-                            <input type="checkbox" name="first_entry[]" value="<?php echo htmlspecialchars($option['value']); ?>"<?php echo user_filter_checked($firstEntryFilters, $option['value']); ?>>
-                            <span><?php echo htmlspecialchars($option['label']); ?> (<?php echo (int) $option['count']; ?>)</span>
-                        </label>
+                        <?php render_filter_choice('first_entry', $firstEntryIncludeFilters, $firstEntryExcludeFilters, $option); ?>
                     <?php endforeach; ?>
                 </fieldset>
 
@@ -263,10 +472,7 @@ render_admin_layout_start('Фильтр пользователей — Адми�
                     <?php endif; ?>
                     <?php foreach ($monthOptions as $option): ?>
                         <?php $month = $option['first_month']; ?>
-                        <label class="checkbox-row">
-                            <input type="checkbox" name="first_message_month[]" value="<?php echo htmlspecialchars($month); ?>"<?php echo in_array($month, $firstMessageMonths, true) ? ' checked' : ''; ?>>
-                            <span><?php echo htmlspecialchars($month); ?> (<?php echo (int) $option['user_count']; ?>)</span>
-                        </label>
+                        <?php render_month_filter_choice('first_message_month', $month, (int) $option['user_count'], $firstMessageIncludeMonths, $firstMessageExcludeMonths); ?>
                     <?php endforeach; ?>
                 </fieldset>
 
@@ -279,10 +485,7 @@ render_admin_layout_start('Фильтр пользователей — Адми�
                     <?php endif; ?>
                     <?php foreach ($lastMonthOptions as $option): ?>
                         <?php $month = $option['last_month']; ?>
-                        <label class="checkbox-row">
-                            <input type="checkbox" name="last_message_month[]" value="<?php echo htmlspecialchars($month); ?>"<?php echo in_array($month, $lastMessageMonths, true) ? ' checked' : ''; ?>>
-                            <span><?php echo htmlspecialchars($month); ?> (<?php echo (int) $option['user_count']; ?>)</span>
-                        </label>
+                        <?php render_month_filter_choice('last_message_month', $month, (int) $option['user_count'], $lastMessageIncludeMonths, $lastMessageExcludeMonths); ?>
                     <?php endforeach; ?>
                 </fieldset>
 
@@ -303,11 +506,15 @@ render_admin_layout_start('Фильтр пользователей — Адми�
                     <?php foreach ($users as $user): ?>
                         <?php
                             $label = render_filter_user_label($user);
-                            $firstMessage = trim($user['first_message'] ?? '');
+                            $filterLabels = render_user_filter_labels($user, $saintTwinsPrefix, $vibeQuizPrefix, $questPrefix, $adult18Prefix, $quizBetPattern);
                         ?>
                         <a class="filtered-user" href="admin_dialogues.php?user_id=<?php echo (int) $user['id']; ?>">
                             <strong><?php echo htmlspecialchars($label); ?></strong>
-                            <span class="muted-small">Первое сообщение: <?php echo htmlspecialchars($firstMessage !== '' ? $firstMessage : 'нет пользовательских сообщений'); ?></span>
+                            <div class="filter-label-list" aria-label="Метки пользователя">
+                                <?php foreach ($filterLabels as $filterLabel): ?>
+                                    <span class="user-filter-label"><?php echo htmlspecialchars($filterLabel); ?></span>
+                                <?php endforeach; ?>
+                            </div>
                         </a>
                     <?php endforeach; ?>
                 </div>
