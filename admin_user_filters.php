@@ -23,23 +23,28 @@ $firstMessageJoin = '
 
 $countStmt = $conn->prepare(
     'SELECT
-        SUM(CASE WHEN first_user_message.first_message LIKE :saint_twins_pattern THEN 1 ELSE 0 END) AS saint_twins_detective_count,
-        SUM(CASE WHEN first_user_message.first_message IS NULL OR first_user_message.first_message NOT LIKE :saint_twins_pattern THEN 1 ELSE 0 END) AS other_count,
+        SUM(CASE WHEN first_user_message.first_message LIKE :count_saint_twins_pattern THEN 1 ELSE 0 END) AS saint_twins_detective_count,
+        SUM(CASE WHEN first_user_message.first_message IS NULL OR first_user_message.first_message NOT LIKE :count_other_pattern THEN 1 ELSE 0 END) AS other_count,
         COUNT(*) AS total_count
      FROM users u' . $firstMessageJoin
 );
-$countStmt->execute([':saint_twins_pattern' => $saintTwinsPrefix . '%']);
+$countStmt->execute([
+    ':count_saint_twins_pattern' => $saintTwinsPrefix . '%',
+    ':count_other_pattern' => $saintTwinsPrefix . '%',
+]);
 $counts = $countStmt->fetch(PDO::FETCH_ASSOC) ?: [];
 
 $whereParts = [];
-$params = [':saint_twins_pattern' => $saintTwinsPrefix . '%'];
+$params = [];
 if ($firstEntryFilters !== []) {
     $filterParts = [];
     if (in_array('saint_twins_detective', $firstEntryFilters, true)) {
-        $filterParts[] = 'first_user_message.first_message LIKE :saint_twins_pattern';
+        $filterParts[] = 'first_user_message.first_message LIKE :filter_saint_twins_pattern';
+        $params[':filter_saint_twins_pattern'] = $saintTwinsPrefix . '%';
     }
     if (in_array('other', $firstEntryFilters, true)) {
-        $filterParts[] = '(first_user_message.first_message IS NULL OR first_user_message.first_message NOT LIKE :saint_twins_pattern)';
+        $filterParts[] = '(first_user_message.first_message IS NULL OR first_user_message.first_message NOT LIKE :filter_other_pattern)';
+        $params[':filter_other_pattern'] = $saintTwinsPrefix . '%';
     }
     if ($filterParts !== []) {
         $whereParts[] = '(' . implode(' OR ', $filterParts) . ')';
