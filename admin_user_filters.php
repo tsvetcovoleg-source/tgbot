@@ -16,6 +16,9 @@ $lastMessageMonths = isset($_GET['last_message_month']) && is_array($_GET['last_
         return preg_match('/^\d{4}-\d{2}$/', $month) === 1;
     }))
     : [];
+$specialFilters = isset($_GET['special_filter']) && is_array($_GET['special_filter'])
+    ? array_values(array_intersect($_GET['special_filter'], ['visited_quiz_bets']))
+    : [];
 
 function get_message_date_column(PDO $conn): ?string
 {
@@ -63,6 +66,24 @@ $lastMessageJoin = '
         ) lm ON lm.user_id = m.user_id AND lm.last_message_id = m.id
     ) last_user_message ON last_user_message.user_id = u.id
 ';
+
+$specialCountStmt = $conn->prepare(
+    'SELECT COUNT(DISTINCT u.id) AS visited_quiz_bets_count
+     FROM users u
+     INNER JOIN messages m ON m.user_id = u.id
+     WHERE m.from_bot = 0 AND m.message REGEXP :visited_quiz_bets_pattern'
+);
+$specialCountStmt->execute([
+    ':visited_quiz_bets_pattern' => $quizBetPattern,
+]);
+$specialCounts = $specialCountStmt->fetch(PDO::FETCH_ASSOC) ?: [];
+$specialFilterOptions = [
+    [
+        'value' => 'visited_quiz_bets',
+        'label' => 'Заходили в ставки на квизе',
+        'count' => (int) ($specialCounts['visited_quiz_bets_count'] ?? 0),
+    ],
+];
 
 $countStmt = $conn->prepare(
     'SELECT
@@ -184,6 +205,11 @@ if ($firstEntryFilters !== []) {
     }
 }
 
+if (in_array('visited_quiz_bets', $specialFilters, true)) {
+    $whereParts[] = 'EXISTS (SELECT 1 FROM messages special_quiz_bet_message WHERE special_quiz_bet_message.user_id = u.id AND special_quiz_bet_message.from_bot = 0 AND special_quiz_bet_message.message REGEXP :special_visited_quiz_bets_pattern)';
+    $params[':special_visited_quiz_bets_pattern'] = $quizBetPattern;
+}
+
 if ($messageDateColumn !== null && $firstMessageMonths !== []) {
     $monthPlaceholders = [];
     foreach ($firstMessageMonths as $index => $month) {
@@ -223,6 +249,16 @@ function user_filter_checked(array $filters, string $value): string
     return in_array($value, $filters, true) ? ' checked' : '';
 }
 
+function render_filter_checkbox(string $name, array $filters, array $option): void
+{
+    ?>
+    <label class="checkbox-row">
+        <input type="checkbox" name="<?php echo htmlspecialchars($name); ?>[]" value="<?php echo htmlspecialchars($option['value']); ?>"<?php echo user_filter_checked($filters, $option['value']); ?>>
+        <span><?php echo htmlspecialchars($option['label']); ?> (<?php echo (int) $option['count']; ?>)</span>
+    </label>
+    <?php
+}
+
 function render_filter_user_label(array $user): string
 {
     $name = trim(($user['first_name'] ?? '') . ' ' . ($user['last_name'] ?? ''));
@@ -247,10 +283,14 @@ render_admin_layout_start('Фильтр пользователей — Адми�
                 <fieldset class="filter-group">
                     <legend>Первый вход</legend>
                     <?php foreach ($firstEntryOptions as $option): ?>
-                        <label class="checkbox-row">
-                            <input type="checkbox" name="first_entry[]" value="<?php echo htmlspecialchars($option['value']); ?>"<?php echo user_filter_checked($firstEntryFilters, $option['value']); ?>>
-                            <span><?php echo htmlspecialchars($option['label']); ?> (<?php echo (int) $option['count']; ?>)</span>
-                        </label>
+                        <?php render_filter_checkbox('first_entry', $firstEntryFilters, $option); ?>
+                    <?php endforeach; ?>
+                </fieldset>
+
+                <fieldset class="filter-group">
+                    <legend>Специальные фильтры</legend>
+                    <?php foreach ($specialFilterOptions as $option): ?>
+                        <?php render_filter_checkbox('special_filter', $specialFilters, $option); ?>
                     <?php endforeach; ?>
                 </fieldset>
 
