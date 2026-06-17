@@ -33,10 +33,6 @@ jobs:
             --exclude='cache/' \
             --exclude='tmp/' \
             --exclude='temp/' \
-            --exclude='uploads/' \
-            --exclude='storage/' \
-            --exclude='vendor/' \
-            --exclude='node_modules/' \
             ./ deploy/
 
       - name: Deploy to test folder
@@ -75,10 +71,6 @@ jobs:
             --exclude='cache/' \
             --exclude='tmp/' \
             --exclude='temp/' \
-            --exclude='uploads/' \
-            --exclude='storage/' \
-            --exclude='vendor/' \
-            --exclude='node_modules/' \
             ./ deploy/
 
       - name: Deploy to production folder
