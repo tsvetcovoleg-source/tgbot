@@ -17,6 +17,23 @@ $lastMessageMonths = isset($_GET['last_message_month']) && is_array($_GET['last_
     }))
     : [];
 
+function get_message_date_column(PDO $conn): ?string
+{
+    foreach (['created_at', 'timestamp'] as $column) {
+        $stmt = $conn->query("SHOW COLUMNS FROM messages LIKE " . $conn->quote($column));
+        if ($stmt && $stmt->fetch(PDO::FETCH_ASSOC)) {
+            return $column;
+        }
+    }
+
+    return null;
+}
+
+$messageDateColumn = get_message_date_column($conn);
+$messageDateSelect = $messageDateColumn !== null
+    ? ', m.`' . str_replace('`', '``', $messageDateColumn) . '`'
+    : ', NULL';
+
 $saintTwinsPrefix = 'Я хочу зарегистрироваться на игру «Saint Twins Detective';
 $vibeQuizPrefix = 'Я хочу зарегистрироваться на игру «Vibe Quiz';
 $questPrefix = 'Я хочу зарегистрироваться на игру «Квест';
@@ -24,7 +41,7 @@ $adult18Prefix = 'Я хочу зарегистрироваться на игру
 $quizBetPattern = '^/start [0-9]+_lot';
 $firstMessageJoin = '
     LEFT JOIN (
-        SELECT m.user_id, m.message AS first_message, m.created_at AS first_message_created_at, m.id AS first_message_id
+        SELECT m.user_id, m.message AS first_message' . $messageDateSelect . ' AS first_message_created_at, m.id AS first_message_id
         FROM messages m
         INNER JOIN (
             SELECT user_id, MIN(id) AS first_message_id
@@ -36,7 +53,7 @@ $firstMessageJoin = '
 ';
 $lastMessageJoin = '
     LEFT JOIN (
-        SELECT m.user_id, m.created_at AS last_message_created_at, m.id AS last_message_id
+        SELECT m.user_id' . $messageDateSelect . ' AS last_message_created_at, m.id AS last_message_id
         FROM messages m
         INNER JOIN (
             SELECT user_id, MAX(id) AS last_message_id
@@ -108,23 +125,27 @@ usort($firstEntryOptions, static function (array $left, array $right): int {
     return $right['count'] <=> $left['count'];
 });
 
-$monthStmt = $conn->query(
-    "SELECT DATE_FORMAT(first_user_message.first_message_created_at, '%Y-%m') AS first_month, COUNT(*) AS user_count
-     FROM users u" . $firstMessageJoin . "
-     WHERE first_user_message.first_message_created_at IS NOT NULL
-     GROUP BY first_month
-     ORDER BY first_month ASC"
-);
-$monthOptions = $monthStmt->fetchAll(PDO::FETCH_ASSOC);
+$monthOptions = [];
+$lastMonthOptions = [];
+if ($messageDateColumn !== null) {
+    $monthStmt = $conn->query(
+        "SELECT DATE_FORMAT(first_user_message.first_message_created_at, '%Y-%m') AS first_month, COUNT(*) AS user_count
+         FROM users u" . $firstMessageJoin . "
+         WHERE first_user_message.first_message_created_at IS NOT NULL
+         GROUP BY first_month
+         ORDER BY first_month ASC"
+    );
+    $monthOptions = $monthStmt->fetchAll(PDO::FETCH_ASSOC);
 
-$lastMonthStmt = $conn->query(
-    "SELECT DATE_FORMAT(last_user_message.last_message_created_at, '%Y-%m') AS last_month, COUNT(*) AS user_count
-     FROM users u" . $lastMessageJoin . "
-     WHERE last_user_message.last_message_created_at IS NOT NULL
-     GROUP BY last_month
-     ORDER BY last_month ASC"
-);
-$lastMonthOptions = $lastMonthStmt->fetchAll(PDO::FETCH_ASSOC);
+    $lastMonthStmt = $conn->query(
+        "SELECT DATE_FORMAT(last_user_message.last_message_created_at, '%Y-%m') AS last_month, COUNT(*) AS user_count
+         FROM users u" . $lastMessageJoin . "
+         WHERE last_user_message.last_message_created_at IS NOT NULL
+         GROUP BY last_month
+         ORDER BY last_month ASC"
+    );
+    $lastMonthOptions = $lastMonthStmt->fetchAll(PDO::FETCH_ASSOC);
+}
 
 $whereParts = [];
 $params = [];
@@ -163,7 +184,7 @@ if ($firstEntryFilters !== []) {
     }
 }
 
-if ($firstMessageMonths !== []) {
+if ($messageDateColumn !== null && $firstMessageMonths !== []) {
     $monthPlaceholders = [];
     foreach ($firstMessageMonths as $index => $month) {
         $placeholder = ':first_message_month_' . $index;
@@ -173,7 +194,7 @@ if ($firstMessageMonths !== []) {
     $whereParts[] = "DATE_FORMAT(first_user_message.first_message_created_at, '%Y-%m') IN (" . implode(', ', $monthPlaceholders) . ')';
 }
 
-if ($lastMessageMonths !== []) {
+if ($messageDateColumn !== null && $lastMessageMonths !== []) {
     $lastMonthPlaceholders = [];
     foreach ($lastMessageMonths as $index => $month) {
         $placeholder = ':last_message_month_' . $index;
@@ -235,7 +256,9 @@ render_admin_layout_start('Фильтр пользователей — Адми�
 
                 <fieldset class="filter-group">
                     <legend>Месяц первого сообщения</legend>
-                    <?php if ($monthOptions === []): ?>
+                    <?php if ($messageDateColumn === null): ?>
+                        <p class="muted-small">В таблице messages нет колонки с датой</p>
+                    <?php elseif ($monthOptions === []): ?>
                         <p class="muted-small">Нет сообщений с датой</p>
                     <?php endif; ?>
                     <?php foreach ($monthOptions as $option): ?>
@@ -249,7 +272,9 @@ render_admin_layout_start('Фильтр пользователей — Адми�
 
                 <fieldset class="filter-group">
                     <legend>Месяц последнего сообщения</legend>
-                    <?php if ($lastMonthOptions === []): ?>
+                    <?php if ($messageDateColumn === null): ?>
+                        <p class="muted-small">В таблице messages нет колонки с датой</p>
+                    <?php elseif ($lastMonthOptions === []): ?>
                         <p class="muted-small">Нет сообщений с датой</p>
                     <?php endif; ?>
                     <?php foreach ($lastMonthOptions as $option): ?>
