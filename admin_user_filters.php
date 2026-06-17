@@ -19,7 +19,7 @@ $lastMessageMonths = isset($_GET['last_message_month']) && is_array($_GET['last_
 
 function get_message_date_column(PDO $conn): ?string
 {
-    foreach (['created_at', 'timestamp'] as $column) {
+    foreach (['sent_at', 'created_at', 'timestamp'] as $column) {
         $stmt = $conn->query("SHOW COLUMNS FROM messages LIKE " . $conn->quote($column));
         if ($stmt && $stmt->fetch(PDO::FETCH_ASSOC)) {
             return $column;
@@ -257,7 +257,7 @@ render_admin_layout_start('Фильтр пользователей — Адми�
                 <fieldset class="filter-group">
                     <legend>Месяц первого сообщения</legend>
                     <?php if ($messageDateColumn === null): ?>
-                        <p class="muted-small">В таблице messages нет колонки с датой</p>
+                        <p class="muted-small">В таблице messages нет колонки sent_at, created_at или timestamp</p>
                     <?php elseif ($monthOptions === []): ?>
                         <p class="muted-small">Нет сообщений с датой</p>
                     <?php endif; ?>
@@ -273,7 +273,7 @@ render_admin_layout_start('Фильтр пользователей — Адми�
                 <fieldset class="filter-group">
                     <legend>Месяц последнего сообщения</legend>
                     <?php if ($messageDateColumn === null): ?>
-                        <p class="muted-small">В таблице messages нет колонки с датой</p>
+                        <p class="muted-small">В таблице messages нет колонки sent_at, created_at или timestamp</p>
                     <?php elseif ($lastMonthOptions === []): ?>
                         <p class="muted-small">Нет сообщений с датой</p>
                     <?php endif; ?>
