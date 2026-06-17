@@ -102,6 +102,16 @@ function render_admin_layout_start(string $title, string $activeNav, string $hea
             .bubble.bot { background: #ecfdf3; margin-left: auto; }
             .dialogue-empty { color: #666; text-align: center; padding: 20px; }
             .section-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+            .filters-layout { display: grid; grid-template-columns: minmax(240px, 320px) 1fr; gap: 18px; align-items: start; }
+            .filters-sidebar { border: 1px solid var(--border); border-radius: 12px; padding: 14px; background: #f8fafc; display: flex; flex-direction: column; gap: 14px; }
+            .filter-group { border: 1px solid var(--border); border-radius: 10px; padding: 12px; margin: 0; background: #fff; }
+            .filter-group legend { padding: 0 6px; font-weight: 700; }
+            .checkbox-row { display: flex; align-items: center; gap: 8px; margin: 10px 0 0; font-weight: 400; }
+            .checkbox-row input { width: auto; }
+            .filtered-users { min-width: 0; }
+            .filtered-user-list { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+            .filtered-user { border: 1px solid var(--border); border-radius: 10px; padding: 12px; background: #fff; text-decoration: none; color: #0f172a; display: flex; flex-direction: column; gap: 6px; }
+            .filtered-user:hover { border-color: var(--blue); background: #f0f6ff; }
         </style>
     </head>
     <body>
@@ -111,6 +121,7 @@ function render_admin_layout_start(string $title, string $activeNav, string $hea
                 <a class="nav-link <?php echo $activeNav === 'games' ? 'active' : ''; ?>" href="admin_games.php">Игры</a>
                 <a class="nav-link <?php echo $activeNav === 'games-archive' ? 'active' : ''; ?>" href="admin_games_archive.php">Архив игр</a>
                 <a class="nav-link <?php echo $activeNav === 'dialogues' ? 'active' : ''; ?>" href="admin_dialogues.php">Диалоги</a>
+                <a class="nav-link <?php echo $activeNav === 'user-filters' ? 'active' : ''; ?>" href="admin_user_filters.php">Фильтр пользователей</a>
                 <a class="nav-link <?php echo $activeNav === 'subscriptions' ? 'active' : ''; ?>" href="admin_subscriptions.php">Уведомления</a>
                 <a class="nav-link <?php echo $activeNav === 'create' ? 'active' : ''; ?>" href="admin_create_game.php">Создать игру</a>
             </nav>
