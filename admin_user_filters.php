@@ -449,19 +449,17 @@ render_admin_layout_start('Фильтр пользователей — Адми�
                     <h2>Фильтры</h2>
                     <button type="submit">Применить</button>
                 </div>
-                <p class="filter-hint">Нажмите <strong>+</strong>, чтобы выбрать пользователей с признаком, или <strong>−</strong>, чтобы исключить их из выдачи.</p>
+                <fieldset class="filter-group">
+                    <legend>Специальные фильтры</legend>
+                    <?php foreach ($specialFilterOptions as $option): ?>
+                        <?php render_filter_choice('special_filter', $specialIncludeFilters, $specialExcludeFilters, $option); ?>
+                    <?php endforeach; ?>
+                </fieldset>
 
                 <fieldset class="filter-group">
                     <legend>Первый вход</legend>
                     <?php foreach ($firstEntryOptions as $option): ?>
                         <?php render_filter_choice('first_entry', $firstEntryIncludeFilters, $firstEntryExcludeFilters, $option); ?>
-                    <?php endforeach; ?>
-                </fieldset>
-
-                <fieldset class="filter-group">
-                    <legend>Специальные фильтры</legend>
-                    <?php foreach ($specialFilterOptions as $option): ?>
-                        <?php render_filter_choice('special_filter', $specialIncludeFilters, $specialExcludeFilters, $option); ?>
                     <?php endforeach; ?>
                 </fieldset>
 
