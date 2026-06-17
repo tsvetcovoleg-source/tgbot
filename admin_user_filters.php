@@ -342,16 +342,43 @@ function user_filter_checked(array $filters, string $value): string
 function render_filter_choice(string $name, array $includeFilters, array $excludeFilters, array $option): void
 {
     ?>
-    <div class="checkbox-row">
-        <span><?php echo htmlspecialchars($option['label']); ?> (<?php echo (int) $option['count']; ?>)</span>
-        <label>
-            <input type="checkbox" name="<?php echo htmlspecialchars($name); ?>_include[]" value="<?php echo htmlspecialchars($option['value']); ?>"<?php echo user_filter_checked($includeFilters, $option['value']); ?>>
-            +
-        </label>
-        <label>
-            <input type="checkbox" name="<?php echo htmlspecialchars($name); ?>_exclude[]" value="<?php echo htmlspecialchars($option['value']); ?>"<?php echo user_filter_checked($excludeFilters, $option['value']); ?>>
-            −
-        </label>
+    <div class="filter-choice">
+        <div class="filter-choice-main">
+            <span class="filter-choice-title"><?php echo htmlspecialchars($option['label']); ?></span>
+            <span class="filter-choice-count"><?php echo (int) $option['count']; ?> пользователей</span>
+        </div>
+        <div class="filter-choice-actions" aria-label="Режим фильтра">
+            <label class="filter-toggle include" title="Выбрать пользователей с этим признаком">
+                <input type="checkbox" name="<?php echo htmlspecialchars($name); ?>_include[]" value="<?php echo htmlspecialchars($option['value']); ?>"<?php echo user_filter_checked($includeFilters, $option['value']); ?>>
+                +
+            </label>
+            <label class="filter-toggle exclude" title="Исключить пользователей с этим признаком">
+                <input type="checkbox" name="<?php echo htmlspecialchars($name); ?>_exclude[]" value="<?php echo htmlspecialchars($option['value']); ?>"<?php echo user_filter_checked($excludeFilters, $option['value']); ?>>
+                −
+            </label>
+        </div>
+    </div>
+    <?php
+}
+
+function render_month_filter_choice(string $name, string $month, int $count, array $includeMonths, array $excludeMonths): void
+{
+    ?>
+    <div class="filter-choice">
+        <div class="filter-choice-main">
+            <span class="filter-choice-title"><?php echo htmlspecialchars($month); ?></span>
+            <span class="filter-choice-count"><?php echo $count; ?> пользователей</span>
+        </div>
+        <div class="filter-choice-actions" aria-label="Режим фильтра">
+            <label class="filter-toggle include" title="Выбрать пользователей за этот месяц">
+                <input type="checkbox" name="<?php echo htmlspecialchars($name); ?>_include[]" value="<?php echo htmlspecialchars($month); ?>"<?php echo in_array($month, $includeMonths, true) ? ' checked' : ''; ?>>
+                +
+            </label>
+            <label class="filter-toggle exclude" title="Исключить пользователей за этот месяц">
+                <input type="checkbox" name="<?php echo htmlspecialchars($name); ?>_exclude[]" value="<?php echo htmlspecialchars($month); ?>"<?php echo in_array($month, $excludeMonths, true) ? ' checked' : ''; ?>>
+                −
+            </label>
+        </div>
     </div>
     <?php
 }
@@ -422,7 +449,7 @@ render_admin_layout_start('Фильтр пользователей — Адми�
                     <h2>Фильтры</h2>
                     <button type="submit">Применить</button>
                 </div>
-                <p class="muted-small">+ выбрать пользователей с признаком, − исключить пользователей с признаком</p>
+                <p class="filter-hint">Нажмите <strong>+</strong>, чтобы выбрать пользователей с признаком, или <strong>−</strong>, чтобы исключить их из выдачи.</p>
 
                 <fieldset class="filter-group">
                     <legend>Первый вход</legend>
@@ -447,17 +474,7 @@ render_admin_layout_start('Фильтр пользователей — Адми�
                     <?php endif; ?>
                     <?php foreach ($monthOptions as $option): ?>
                         <?php $month = $option['first_month']; ?>
-                        <div class="checkbox-row">
-                            <span><?php echo htmlspecialchars($month); ?> (<?php echo (int) $option['user_count']; ?>)</span>
-                            <label>
-                                <input type="checkbox" name="first_message_month_include[]" value="<?php echo htmlspecialchars($month); ?>"<?php echo in_array($month, $firstMessageIncludeMonths, true) ? ' checked' : ''; ?>>
-                                +
-                            </label>
-                            <label>
-                                <input type="checkbox" name="first_message_month_exclude[]" value="<?php echo htmlspecialchars($month); ?>"<?php echo in_array($month, $firstMessageExcludeMonths, true) ? ' checked' : ''; ?>>
-                                −
-                            </label>
-                        </div>
+                        <?php render_month_filter_choice('first_message_month', $month, (int) $option['user_count'], $firstMessageIncludeMonths, $firstMessageExcludeMonths); ?>
                     <?php endforeach; ?>
                 </fieldset>
 
@@ -470,17 +487,7 @@ render_admin_layout_start('Фильтр пользователей — Адми�
                     <?php endif; ?>
                     <?php foreach ($lastMonthOptions as $option): ?>
                         <?php $month = $option['last_month']; ?>
-                        <div class="checkbox-row">
-                            <span><?php echo htmlspecialchars($month); ?> (<?php echo (int) $option['user_count']; ?>)</span>
-                            <label>
-                                <input type="checkbox" name="last_message_month_include[]" value="<?php echo htmlspecialchars($month); ?>"<?php echo in_array($month, $lastMessageIncludeMonths, true) ? ' checked' : ''; ?>>
-                                +
-                            </label>
-                            <label>
-                                <input type="checkbox" name="last_message_month_exclude[]" value="<?php echo htmlspecialchars($month); ?>"<?php echo in_array($month, $lastMessageExcludeMonths, true) ? ' checked' : ''; ?>>
-                                −
-                            </label>
-                        </div>
+                        <?php render_month_filter_choice('last_message_month', $month, (int) $option['user_count'], $lastMessageIncludeMonths, $lastMessageExcludeMonths); ?>
                     <?php endforeach; ?>
                 </fieldset>
 
@@ -505,7 +512,11 @@ render_admin_layout_start('Фильтр пользователей — Адми�
                         ?>
                         <a class="filtered-user" href="admin_dialogues.php?user_id=<?php echo (int) $user['id']; ?>">
                             <strong><?php echo htmlspecialchars($label); ?></strong>
-                            <span class="muted-small">Метки: <?php echo htmlspecialchars(implode(' · ', $filterLabels)); ?></span>
+                            <div class="filter-label-list" aria-label="Метки пользователя">
+                                <?php foreach ($filterLabels as $filterLabel): ?>
+                                    <span class="user-filter-label"><?php echo htmlspecialchars($filterLabel); ?></span>
+                                <?php endforeach; ?>
+                            </div>
                         </a>
                     <?php endforeach; ?>
                 </div>
