@@ -11,6 +11,11 @@ $firstMessageMonths = isset($_GET['first_message_month']) && is_array($_GET['fir
         return preg_match('/^\d{4}-\d{2}$/', $month) === 1;
     }))
     : [];
+$lastMessageMonths = isset($_GET['last_message_month']) && is_array($_GET['last_message_month'])
+    ? array_values(array_filter($_GET['last_message_month'], static function (string $month): bool {
+        return preg_match('/^\d{4}-\d{2}$/', $month) === 1;
+    }))
+    : [];
 
 $saintTwinsPrefix = 'Я хочу зарегистрироваться на игру «Saint Twins Detective';
 $vibeQuizPrefix = 'Я хочу зарегистрироваться на игру «Vibe Quiz';
@@ -28,6 +33,18 @@ $firstMessageJoin = '
             GROUP BY user_id
         ) fm ON fm.user_id = m.user_id AND fm.first_message_id = m.id
     ) first_user_message ON first_user_message.user_id = u.id
+';
+$lastMessageJoin = '
+    LEFT JOIN (
+        SELECT m.user_id, m.created_at AS last_message_created_at, m.id AS last_message_id
+        FROM messages m
+        INNER JOIN (
+            SELECT user_id, MAX(id) AS last_message_id
+            FROM messages
+            WHERE from_bot = 0
+            GROUP BY user_id
+        ) lm ON lm.user_id = m.user_id AND lm.last_message_id = m.id
+    ) last_user_message ON last_user_message.user_id = u.id
 ';
 
 $countStmt = $conn->prepare(
@@ -100,6 +117,15 @@ $monthStmt = $conn->query(
 );
 $monthOptions = $monthStmt->fetchAll(PDO::FETCH_ASSOC);
 
+$lastMonthStmt = $conn->query(
+    "SELECT DATE_FORMAT(last_user_message.last_message_created_at, '%Y-%m') AS last_month, COUNT(*) AS user_count
+     FROM users u" . $lastMessageJoin . "
+     WHERE last_user_message.last_message_created_at IS NOT NULL
+     GROUP BY last_month
+     ORDER BY last_month ASC"
+);
+$lastMonthOptions = $lastMonthStmt->fetchAll(PDO::FETCH_ASSOC);
+
 $whereParts = [];
 $params = [];
 if ($firstEntryFilters !== []) {
@@ -147,10 +173,20 @@ if ($firstMessageMonths !== []) {
     $whereParts[] = "DATE_FORMAT(first_user_message.first_message_created_at, '%Y-%m') IN (" . implode(', ', $monthPlaceholders) . ')';
 }
 
+if ($lastMessageMonths !== []) {
+    $lastMonthPlaceholders = [];
+    foreach ($lastMessageMonths as $index => $month) {
+        $placeholder = ':last_message_month_' . $index;
+        $lastMonthPlaceholders[] = $placeholder;
+        $params[$placeholder] = $month;
+    }
+    $whereParts[] = "DATE_FORMAT(last_user_message.last_message_created_at, '%Y-%m') IN (" . implode(', ', $lastMonthPlaceholders) . ')';
+}
+
 $whereSql = $whereParts === [] ? '' : ' WHERE ' . implode(' AND ', $whereParts);
 $userStmt = $conn->prepare(
     'SELECT u.id, u.telegram_id, u.first_name, u.last_name, u.username, first_user_message.first_message, first_user_message.first_message_created_at, lm.last_message_id
-     FROM users u' . $firstMessageJoin . '
+     FROM users u' . $firstMessageJoin . $lastMessageJoin . '
      LEFT JOIN (
          SELECT user_id, MAX(id) AS last_message_id
          FROM messages
@@ -206,6 +242,20 @@ render_admin_layout_start('Фильтр пользователей — Адми�
                         <?php $month = $option['first_month']; ?>
                         <label class="checkbox-row">
                             <input type="checkbox" name="first_message_month[]" value="<?php echo htmlspecialchars($month); ?>"<?php echo in_array($month, $firstMessageMonths, true) ? ' checked' : ''; ?>>
+                            <span><?php echo htmlspecialchars($month); ?> (<?php echo (int) $option['user_count']; ?>)</span>
+                        </label>
+                    <?php endforeach; ?>
+                </fieldset>
+
+                <fieldset class="filter-group">
+                    <legend>Месяц последнего сообщения</legend>
+                    <?php if ($lastMonthOptions === []): ?>
+                        <p class="muted-small">Нет сообщений с датой</p>
+                    <?php endif; ?>
+                    <?php foreach ($lastMonthOptions as $option): ?>
+                        <?php $month = $option['last_month']; ?>
+                        <label class="checkbox-row">
+                            <input type="checkbox" name="last_message_month[]" value="<?php echo htmlspecialchars($month); ?>"<?php echo in_array($month, $lastMessageMonths, true) ? ' checked' : ''; ?>>
                             <span><?php echo htmlspecialchars($month); ?> (<?php echo (int) $option['user_count']; ?>)</span>
                         </label>
                     <?php endforeach; ?>
