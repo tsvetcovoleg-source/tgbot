@@ -6,6 +6,11 @@ require_once __DIR__ . '/admin_shared.php';
 $firstEntryFilters = isset($_GET['first_entry']) && is_array($_GET['first_entry'])
     ? array_values(array_intersect($_GET['first_entry'], ['saint_twins_detective', 'vibe_quiz', 'quest', 'quiz_bet', 'adult_18', 'other']))
     : [];
+$firstMessageMonths = isset($_GET['first_message_month']) && is_array($_GET['first_message_month'])
+    ? array_values(array_filter($_GET['first_message_month'], static function (string $month): bool {
+        return preg_match('/^\d{4}-\d{2}$/', $month) === 1;
+    }))
+    : [];
 
 $saintTwinsPrefix = 'Я хочу зарегистрироваться на игру «Saint Twins Detective';
 $vibeQuizPrefix = 'Я хочу зарегистрироваться на игру «Vibe Quiz';
@@ -14,7 +19,7 @@ $adult18Prefix = 'Я хочу зарегистрироваться на игру
 $quizBetPattern = '^/start [0-9]+_lot';
 $firstMessageJoin = '
     LEFT JOIN (
-        SELECT m.user_id, m.message AS first_message, m.id AS first_message_id
+        SELECT m.user_id, m.message AS first_message, m.created_at AS first_message_created_at, m.id AS first_message_id
         FROM messages m
         INNER JOIN (
             SELECT user_id, MIN(id) AS first_message_id
@@ -86,6 +91,15 @@ usort($firstEntryOptions, static function (array $left, array $right): int {
     return $right['count'] <=> $left['count'];
 });
 
+$monthStmt = $conn->query(
+    "SELECT DATE_FORMAT(first_user_message.first_message_created_at, '%Y-%m') AS first_month, COUNT(*) AS user_count
+     FROM users u" . $firstMessageJoin . "
+     WHERE first_user_message.first_message_created_at IS NOT NULL
+     GROUP BY first_month
+     ORDER BY first_month ASC"
+);
+$monthOptions = $monthStmt->fetchAll(PDO::FETCH_ASSOC);
+
 $whereParts = [];
 $params = [];
 if ($firstEntryFilters !== []) {
@@ -123,9 +137,19 @@ if ($firstEntryFilters !== []) {
     }
 }
 
+if ($firstMessageMonths !== []) {
+    $monthPlaceholders = [];
+    foreach ($firstMessageMonths as $index => $month) {
+        $placeholder = ':first_message_month_' . $index;
+        $monthPlaceholders[] = $placeholder;
+        $params[$placeholder] = $month;
+    }
+    $whereParts[] = "DATE_FORMAT(first_user_message.first_message_created_at, '%Y-%m') IN (" . implode(', ', $monthPlaceholders) . ')';
+}
+
 $whereSql = $whereParts === [] ? '' : ' WHERE ' . implode(' AND ', $whereParts);
 $userStmt = $conn->prepare(
-    'SELECT u.id, u.telegram_id, u.first_name, u.last_name, u.username, first_user_message.first_message, lm.last_message_id
+    'SELECT u.id, u.telegram_id, u.first_name, u.last_name, u.username, first_user_message.first_message, first_user_message.first_message_created_at, lm.last_message_id
      FROM users u' . $firstMessageJoin . '
      LEFT JOIN (
          SELECT user_id, MAX(id) AS last_message_id
@@ -169,6 +193,20 @@ render_admin_layout_start('Фильтр пользователей — Адми�
                         <label class="checkbox-row">
                             <input type="checkbox" name="first_entry[]" value="<?php echo htmlspecialchars($option['value']); ?>"<?php echo user_filter_checked($firstEntryFilters, $option['value']); ?>>
                             <span><?php echo htmlspecialchars($option['label']); ?> (<?php echo (int) $option['count']; ?>)</span>
+                        </label>
+                    <?php endforeach; ?>
+                </fieldset>
+
+                <fieldset class="filter-group">
+                    <legend>Месяц первого сообщения</legend>
+                    <?php if ($monthOptions === []): ?>
+                        <p class="muted-small">Нет сообщений с датой</p>
+                    <?php endif; ?>
+                    <?php foreach ($monthOptions as $option): ?>
+                        <?php $month = $option['first_month']; ?>
+                        <label class="checkbox-row">
+                            <input type="checkbox" name="first_message_month[]" value="<?php echo htmlspecialchars($month); ?>"<?php echo in_array($month, $firstMessageMonths, true) ? ' checked' : ''; ?>>
+                            <span><?php echo htmlspecialchars($month); ?> (<?php echo (int) $option['user_count']; ?>)</span>
                         </label>
                     <?php endforeach; ?>
                 </fieldset>
