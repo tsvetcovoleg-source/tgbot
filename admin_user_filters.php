@@ -50,6 +50,42 @@ $countStmt->execute([
 ]);
 $counts = $countStmt->fetch(PDO::FETCH_ASSOC) ?: [];
 
+$firstEntryOptions = [
+    [
+        'value' => 'saint_twins_detective',
+        'label' => 'Saint Twins Detective',
+        'count' => (int) ($counts['saint_twins_detective_count'] ?? 0),
+    ],
+    [
+        'value' => 'vibe_quiz',
+        'label' => 'Vibe Quiz',
+        'count' => (int) ($counts['vibe_quiz_count'] ?? 0),
+    ],
+    [
+        'value' => 'quest',
+        'label' => 'Квест',
+        'count' => (int) ($counts['quest_count'] ?? 0),
+    ],
+    [
+        'value' => 'quiz_bet',
+        'label' => 'Ставка на квизе',
+        'count' => (int) ($counts['quiz_bet_count'] ?? 0),
+    ],
+    [
+        'value' => 'adult_18',
+        'label' => '18+',
+        'count' => (int) ($counts['adult_18_count'] ?? 0),
+    ],
+    [
+        'value' => 'other',
+        'label' => 'Другое',
+        'count' => (int) ($counts['other_count'] ?? 0),
+    ],
+];
+usort($firstEntryOptions, static function (array $left, array $right): int {
+    return $right['count'] <=> $left['count'];
+});
+
 $whereParts = [];
 $params = [];
 if ($firstEntryFilters !== []) {
@@ -129,30 +165,12 @@ render_admin_layout_start('Фильтр пользователей — Адми�
 
                 <fieldset class="filter-group">
                     <legend>Первый вход</legend>
-                    <label class="checkbox-row">
-                        <input type="checkbox" name="first_entry[]" value="saint_twins_detective"<?php echo user_filter_checked($firstEntryFilters, 'saint_twins_detective'); ?>>
-                        <span>Saint Twins Detective (<?php echo (int) ($counts['saint_twins_detective_count'] ?? 0); ?>)</span>
-                    </label>
-                    <label class="checkbox-row">
-                        <input type="checkbox" name="first_entry[]" value="vibe_quiz"<?php echo user_filter_checked($firstEntryFilters, 'vibe_quiz'); ?>>
-                        <span>Vibe Quiz (<?php echo (int) ($counts['vibe_quiz_count'] ?? 0); ?>)</span>
-                    </label>
-                    <label class="checkbox-row">
-                        <input type="checkbox" name="first_entry[]" value="quest"<?php echo user_filter_checked($firstEntryFilters, 'quest'); ?>>
-                        <span>Квест (<?php echo (int) ($counts['quest_count'] ?? 0); ?>)</span>
-                    </label>
-                    <label class="checkbox-row">
-                        <input type="checkbox" name="first_entry[]" value="quiz_bet"<?php echo user_filter_checked($firstEntryFilters, 'quiz_bet'); ?>>
-                        <span>Ставка на квизе (<?php echo (int) ($counts['quiz_bet_count'] ?? 0); ?>)</span>
-                    </label>
-                    <label class="checkbox-row">
-                        <input type="checkbox" name="first_entry[]" value="adult_18"<?php echo user_filter_checked($firstEntryFilters, 'adult_18'); ?>>
-                        <span>18+ (<?php echo (int) ($counts['adult_18_count'] ?? 0); ?>)</span>
-                    </label>
-                    <label class="checkbox-row">
-                        <input type="checkbox" name="first_entry[]" value="other"<?php echo user_filter_checked($firstEntryFilters, 'other'); ?>>
-                        <span>Другое (<?php echo (int) ($counts['other_count'] ?? 0); ?>)</span>
-                    </label>
+                    <?php foreach ($firstEntryOptions as $option): ?>
+                        <label class="checkbox-row">
+                            <input type="checkbox" name="first_entry[]" value="<?php echo htmlspecialchars($option['value']); ?>"<?php echo user_filter_checked($firstEntryFilters, $option['value']); ?>>
+                            <span><?php echo htmlspecialchars($option['label']); ?> (<?php echo (int) $option['count']; ?>)</span>
+                        </label>
+                    <?php endforeach; ?>
                 </fieldset>
 
                 <a class="link" href="admin_user_filters.php">Сбросить фильтры</a>
